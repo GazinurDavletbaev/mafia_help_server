@@ -1,11 +1,10 @@
 import secrets
+import random
 from datetime import datetime, timedelta
 from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.orm import Session
+from pydantic import BaseModel, EmailStr  # ✅ ДОБАВИТЬ
 from models.db import User
-from core.email import send_reset_password_email
-import random
-
 from models.schemas import (
     UserRegister, UserLogin, Token, UserResponse,
     PhoneSendCodeRequest, PhoneVerifyRequest,
@@ -14,7 +13,7 @@ from models.schemas import (
 )
 from core.database import get_db
 from core.security import get_password_hash, verify_password, create_access_token, decode_token
-from core.email import send_verification_email
+from core.email import send_verification_email, send_reset_code_email  # ✅ ДОБАВИТЬ send_reset_code_email
 from config import ACCESS_TOKEN_EXPIRE_MINUTES
 
 ERROR_MESSAGES = {
@@ -124,6 +123,7 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
     print("=" * 60)
 
     return {"access_token": jwt_token, "token_type": "bearer"}
+
 # ========== ЛОГИН ==========
 @router.post("/login", response_model=Token)
 async def login(user: UserLogin, db: Session = Depends(get_db)):
@@ -300,10 +300,12 @@ async def forgot_password(request: ForgotPasswordRequest, db: Session = Depends(
     print(f"🔑 Код сброса для {request.email}: {code}")
     return {"message": "Код отправлен на почту"}
 
+# ========== МОДЕЛЬ ДЛЯ ПРОВЕРКИ КОДА ==========
 class VerifyResetCodeRequest(BaseModel):
     email: EmailStr
     code: str
 
+# ========== ПРОВЕРКА КОДА ==========
 @router.post("/verify-reset-code")
 async def verify_reset_code(request: VerifyResetCodeRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == request.email).first()
