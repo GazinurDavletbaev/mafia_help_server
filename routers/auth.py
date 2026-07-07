@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.orm import Session
 from models.db import User
 from core.email import send_reset_password_email
+import random
 
 from models.schemas import (
     UserRegister, UserLogin, Token, UserResponse,
@@ -284,38 +285,71 @@ async def forgot_password(request: ForgotPasswordRequest, db: Session = Depends(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    token = secrets.token_urlsafe(32)
-    expires = datetime.utcnow() + timedelta(hours=24)
+    # Генерируем 6-значный код
+    code = f"{random.randint(100000, 999999)}"
+    expires = datetime.utcnow() + timedelta(minutes=15)
     
-    user.reset_token = token
-    user.reset_token_expires = expires
-    user.reset_token_used = False
+    user.reset_code = code
+    user.reset_code_expires = expires
+    user.reset_code_attempts = 0
     db.commit()
     
-    send_reset_password_email(user.email, token)
+    # ✅ ОТПРАВКА КОДА В ПИСЬМЕ
+    send_reset_code_email(user.email, code)
+    
+    print(f"🔑 Код сброса для {request.email}: {code}")
+    return {"message": "Код отправлен на почту"}
 
+class VerifyResetCodeRequest(BaseModel):
+    email: EmailStr
+    code: str
 
-    print(f"🔑 Сброс пароля для {request.email}: token={token}")
-    return {"message": "Password reset link sent"}
+@router.post("/verify-reset-code")
+async def verify_reset_code(request: VerifyResetCodeRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == request.email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    if not user.reset_code:
+        raise HTTPException(status_code=400, detail="Код не запрошен")
+    
+    if user.reset_code_attempts >= 5:
+        raise HTTPException(status_code=400, detail="Слишком много попыток")
+    
+    if user.reset_code_expires < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="Код истёк")
+    
+    if user.reset_code != request.code:
+        user.reset_code_attempts += 1
+        db.commit()
+        raise HTTPException(status_code=400, detail="Неверный код")
+    
+    # ✅ Код верный — генерируем токен для сброса
+    token = secrets.token_urlsafe(32)
+    user.reset_token = token
+    user.reset_token_expires = datetime.utcnow() + timedelta(hours=1)
+    user.reset_code = None  # Очищаем код
+    user.reset_code_attempts = 0
+    db.commit()
+    
+    return {"reset_token": token}
 
 # ========== СБРОС ПАРОЛЯ ==========
 @router.post("/reset-password")
 async def reset_password(request: ResetPasswordRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.reset_token == request.token).first()
     if not user:
-        raise HTTPException(status_code=400, detail="Invalid token")
-    
-    if user.reset_token_used:
-        raise HTTPException(status_code=400, detail="Token already used")
+        raise HTTPException(status_code=400, detail="Недействительный токен")
     
     if user.reset_token_expires < datetime.utcnow():
-        raise HTTPException(status_code=400, detail="Token expired")
+        raise HTTPException(status_code=400, detail="Токен истёк")
     
     user.password_hash = get_password_hash(request.new_password)
-    user.reset_token_used = True
+    user.reset_token = None
+    user.reset_token_expires = None
     db.commit()
     
-    return {"message": "Password reset successful"}
+    return {"message": "Пароль успешно изменён"}
 
 # ========== ИЗМЕНЕНИЕ ПАРОЛЯ ==========
 @router.post("/change-password")

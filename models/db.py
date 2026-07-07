@@ -31,6 +31,10 @@ class User(Base):
     otp_expires = Column(DateTime, nullable=True)
     otp_attempts = Column(Integer, default=0)
     otp_last_attempt = Column(DateTime, nullable=True)
+    
+    reset_code = Column(String(6), nullable=True)
+    reset_code_expires = Column(DateTime, nullable=True)
+    reset_code_attempts = Column(Integer, default=0)
 
     # Восстановление пароля
     reset_token = Column(String(255), nullable=True)
