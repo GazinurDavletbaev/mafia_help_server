@@ -3,6 +3,8 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.orm import Session
 from models.db import User
+from core.email import send_reset_password_email
+
 from models.schemas import (
     UserRegister, UserLogin, Token, UserResponse,
     PhoneSendCodeRequest, PhoneVerifyRequest,
@@ -290,6 +292,9 @@ async def forgot_password(request: ForgotPasswordRequest, db: Session = Depends(
     user.reset_token_used = False
     db.commit()
     
+    send_reset_password_email(user.email, token)
+
+
     print(f"🔑 Сброс пароля для {request.email}: token={token}")
     return {"message": "Password reset link sent"}
 

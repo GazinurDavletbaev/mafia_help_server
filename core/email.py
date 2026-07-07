@@ -14,11 +14,9 @@ def send_verification_email(email: str, token: str):
     print("=" * 60)
     print(f"📧 Кому: {email}")
     print(f"📧 Токен: {token}")
-    print(f"📧 SMTP_USER: {SMTP_USER}")
-    print(f"📧 SMTP_HOST: {SMTP_HOST}")
-    print(f"📧 SMTP_PORT: {SMTP_PORT}")
 
-    link = f"http://161.104.46.234:8001/auth/verify-email?token={token}"
+    # ✅ ИСПРАВЛЕНО — ссылка на приложение
+    link = f"mafiahelp://verify-email?token={token}"
     print(f"🔗 Ссылка: {link}")
 
     msg = MIMEMultipart()
@@ -74,6 +72,8 @@ def send_verification_email(email: str, token: str):
         traceback.print_exc()
         print("=" * 60)
         return False
+
+
 def send_reset_password_email(email: str, token: str):
     """Отправка письма для сброса пароля"""
     print("=" * 60)
@@ -82,7 +82,8 @@ def send_reset_password_email(email: str, token: str):
     print(f"📧 Кому: {email}")
     print(f"📧 Токен: {token}")
 
-    link = f"http://161.104.46.234:8001/auth/reset-password?token={token}"
+    # ✅ ИСПРАВЛЕНО — ссылка на приложение
+    link = f"mafiahelp://reset-password?token={token}"
     print(f"🔗 Ссылка: {link}")
 
     msg = MIMEMultipart()
