@@ -74,3 +74,54 @@ def send_verification_email(email: str, token: str):
         traceback.print_exc()
         print("=" * 60)
         return False
+def send_reset_password_email(email: str, token: str):
+    """Отправка письма для сброса пароля"""
+    print("=" * 60)
+    print("📧 ОТПРАВКА ПИСЬМА ДЛЯ СБРОСА ПАРОЛЯ")
+    print("=" * 60)
+    print(f"📧 Кому: {email}")
+    print(f"📧 Токен: {token}")
+
+    link = f"http://161.104.46.234:8001/auth/reset-password?token={token}"
+    print(f"🔗 Ссылка: {link}")
+
+    msg = MIMEMultipart()
+    msg['From'] = SMTP_USER
+    msg['To'] = email
+    msg['Subject'] = "Восстановление пароля — Mafia Help"
+
+    body = f"""
+    <html>
+    <body style="font-family: Arial, sans-serif; max-width: 500px;">
+        <h2 style="color: #f58b20;">Восстановление пароля</h2>
+        <p>Вы запросили сброс пароля. Нажмите на кнопку ниже, чтобы установить новый пароль:</p>
+        <a href="{link}" style="display: inline-block; background: #f58b20; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold;">Сбросить пароль</a>
+        <p style="color: #666; font-size: 12px; margin-top: 20px;">Ссылка действует 24 часа.</p>
+        <p style="color: #999; font-size: 12px;">Если вы не запрашивали сброс пароля, просто проигнорируйте это письмо.</p>
+    </body>
+    </html>
+    """
+
+    msg.attach(MIMEText(body, 'html'))
+
+    try:
+        print("📧 Подключаюсь к SMTP...")
+        server = smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT)
+        print("✅ Подключено")
+        
+        print("📧 Логинюсь...")
+        server.login(SMTP_USER, SMTP_PASSWORD)
+        print("✅ Логин успешен")
+        
+        print("📧 Отправляю письмо...")
+        server.send_message(msg)
+        print("✅ Письмо отправлено")
+        
+        server.quit()
+        print("=" * 60)
+        return True
+        
+    except Exception as e:
+        print(f"❌ ОШИБКА: {e}")
+        print("=" * 60)
+        return False
