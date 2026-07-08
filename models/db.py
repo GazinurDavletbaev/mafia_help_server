@@ -51,6 +51,11 @@ class Club(Base):
     logo_url = Column(String(255), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    
+    # ✅ НОВЫЕ ПОЛЯ ДЛЯ СТАТУСА КЛУБА
+    is_official = Column(Boolean, default=False)
+    official_verified_at = Column(DateTime, nullable=True)
+    official_verified_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
 class ClubJudge(Base):
     __tablename__ = "club_judges"
@@ -58,6 +63,20 @@ class ClubJudge(Base):
     club_id = Column(Integer, ForeignKey("clubs.id", ondelete="CASCADE"), primary_key=True)
     judge_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
     created_at = Column(DateTime, server_default=func.now())
+
+class ClubRequest(Base):
+    __tablename__ = "club_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    club_id = Column(Integer, ForeignKey("clubs.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    status = Column(String(20), default="pending")  # pending, approved, rejected
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    # Связи
+    club = relationship("Club", backref="requests")
+    user = relationship("User", backref="club_requests")
 
 class Game(Base):
     __tablename__ = "games"
