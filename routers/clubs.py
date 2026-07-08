@@ -506,3 +506,25 @@ async def demote_from_judge(
         raise HTTPException(status_code=404, detail="Пользователь не состоит в клубе")
     
     return {"message": "Судья снят с должности"}
+    
+@router.get("/requests/pending-count")
+async def get_pending_requests_count(
+    token: str,
+    db: Session = Depends(get_db)
+):
+    user = get_current_user(token, db)
+    
+    # Получаем клубы, где пользователь — президент
+    clubs = db.query(Club).filter(Club.president_id == user.id).all()
+    if not clubs:
+        return {"count": 0}
+    
+    club_ids = [club.id for club in clubs]
+    
+    # Считаем все pending заявки
+    count = db.query(ClubRequest).filter(
+        ClubRequest.club_id.in_(club_ids),
+        ClubRequest.status == "pending"
+    ).count()
+    
+    return {"count": count}
