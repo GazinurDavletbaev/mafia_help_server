@@ -514,14 +514,13 @@ async def get_pending_requests_count(
 ):
     user = get_current_user(token, db)
     
-    # Получаем клубы, где пользователь — президент
+    # ✅ Проверяем, является ли пользователь президентом
     clubs = db.query(Club).filter(Club.president_id == user.id).all()
     if not clubs:
-        return {"count": 0}
+        return {"count": 0}  # ✅ Не президент → 0 заявок
     
     club_ids = [club.id for club in clubs]
     
-    # Считаем все pending заявки
     count = db.query(ClubRequest).filter(
         ClubRequest.club_id.in_(club_ids),
         ClubRequest.status == "pending"
