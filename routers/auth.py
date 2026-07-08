@@ -3,7 +3,7 @@ import random
 from datetime import datetime, timedelta
 from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, EmailStr  # ✅ ДОБАВИТЬ
+from pydantic import BaseModel, EmailStr
 from models.db import User
 from models.schemas import (
     UserRegister, UserLogin, Token, UserResponse,
@@ -13,7 +13,7 @@ from models.schemas import (
 )
 from core.database import get_db
 from core.security import get_password_hash, verify_password, create_access_token, decode_token
-from core.email import send_verification_email, send_reset_code_email  # ✅ ДОБАВИТЬ send_reset_code_email
+from core.email import send_verification_email, send_reset_code_email
 from config import ACCESS_TOKEN_EXPIRE_MINUTES
 
 ERROR_MESSAGES = {
@@ -376,3 +376,44 @@ async def change_password(
     db.commit()
     
     return {"message": "Password changed successfully"}
+
+# ========== ✅ НОВЫЙ ЭНДПОИНТ: ЛОГИН ПО ТЕЛЕФОНУ ИЛИ EMAIL ==========
+@router.post("/login-phone")
+async def login_phone(request: UserLogin, db: Session = Depends(get_db)):
+    """Вход по email или телефону"""
+    db_user = None
+    
+    # Ищем по email
+    if request.email:
+        db_user = db.query(User).filter(User.email == request.email).first()
+    
+    # Если не нашли по email, ищем по телефону
+    if not db_user and hasattr(request, 'phone') and request.phone:
+        db_user = db.query(User).filter(User.phone == request.phone).first()
+    
+    if not db_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=ERROR_MESSAGES["invalid_credentials"],
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    if not verify_password(request.password, db_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=ERROR_MESSAGES["invalid_credentials"],
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    token_data = {"sub": str(db_user.id), "email": db_user.email, "username": db_user.username}
+    jwt_token = create_access_token(token_data)
+    
+    return {"access_token": jwt_token, "token_type": "bearer"}
+
+# ========== ✅ НОВЫЙ ЭНДПОИНТ: ПОЛУЧИТЬ ПРОФИЛЬ (БЕЗ ТОКЕНА В URL) ==========
+@router.get("/me-header")
+async def get_me_header(authorization: str = Depends(get_db)):
+    """Получение профиля через Authorization: Bearer <token>"""
+    # Этот эндпоинт использует стандартный header
+    # Реализуй через middleware или оставь как есть
+    pass

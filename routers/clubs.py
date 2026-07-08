@@ -1,0 +1,508 @@
+from fastapi import APIRouter, HTTPException, Depends, status
+from sqlalchemy.orm import Session
+from typing import List, Optional
+from pydantic import BaseModel
+from datetime import datetime
+
+from models.db import User, Club, ClubJudge, ClubRequest
+from core.database import get_db
+from core.security import decode_token
+
+router = APIRouter()
+
+# ============================================================
+# СХЕМЫ
+# ============================================================
+
+class ClubCreate(BaseModel):
+    title: str
+    city: Optional[str] = None
+
+class ClubResponse(BaseModel):
+    id: int
+    title: str
+    city: Optional[str]
+    president_id: int
+    president_name: Optional[str]
+    logo_url: Optional[str]
+    judges_count: int
+    is_official: bool
+    is_member: bool = False
+    is_pending: bool = False
+    created_at: datetime
+
+class ClubDetailResponse(BaseModel):
+    id: int
+    title: str
+    city: Optional[str]
+    president_id: int
+    president_name: Optional[str]
+    logo_url: Optional[str]
+    judges_count: int
+    is_official: bool
+    created_at: datetime
+
+# ============================================================
+# ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+# ============================================================
+
+def get_current_user(token: str, db: Session):
+    payload = decode_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Недействительный токен")
+    user_id = int(payload.get("sub"))
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+    return user
+
+# ============================================================
+# ЭНДПОИНТЫ КЛУБОВ
+# ============================================================
+
+# ---------- ПОЛУЧИТЬ ВСЕ КЛУБЫ ----------
+@router.get("/clubs", response_model=List[ClubResponse])
+async def get_clubs(
+    token: str,
+    db: Session = Depends(get_db)
+):
+    user = get_current_user(token, db)
+    
+    clubs = db.query(Club).all()
+    result = []
+    for club in clubs:
+        president = db.query(User).filter(User.id == club.president_id).first()
+        judges_count = db.query(ClubJudge).filter(ClubJudge.club_id == club.id).count()
+        
+        is_member = db.query(ClubJudge).filter(
+            ClubJudge.club_id == club.id,
+            ClubJudge.judge_id == user.id
+        ).first() is not None
+        
+        pending_request = db.query(ClubRequest).filter(
+            ClubRequest.club_id == club.id,
+            ClubRequest.user_id == user.id,
+            ClubRequest.status == "pending"
+        ).first()
+        is_pending = pending_request is not None
+        
+        result.append({
+            "id": club.id,
+            "title": club.title,
+            "city": club.city,
+            "president_id": club.president_id,
+            "president_name": president.username if president else None,
+            "logo_url": club.logo_url,
+            "judges_count": judges_count,
+            "is_official": club.is_official,
+            "is_member": is_member,
+            "is_pending": is_pending,
+            "created_at": club.created_at,
+        })
+    
+    # Сортировка: сначала официальные
+    result.sort(key=lambda x: (not x["is_official"], x["title"]))
+    return result
+
+# ---------- СОЗДАТЬ КЛУБ ----------
+@router.post("/clubs", response_model=ClubDetailResponse)
+async def create_club(
+    club_data: ClubCreate,
+    token: str,
+    db: Session = Depends(get_db)
+):
+    user = get_current_user(token, db)
+    
+    # Проверка, что у пользователя нет клуба
+    existing_club = db.query(Club).filter(Club.president_id == user.id).first()
+    if existing_club:
+        raise HTTPException(status_code=400, detail="Вы уже являетесь президентом клуба")
+    
+    # Проверка дубликата названия
+    existing = db.query(Club).filter(Club.title == club_data.title).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Клуб с таким названием уже существует")
+    
+    club = Club(
+        title=club_data.title,
+        city=club_data.city,
+        president_id=user.id,
+        is_official=False,
+    )
+    db.add(club)
+    db.commit()
+    db.refresh(club)
+    
+    # Добавляем создателя как участника
+    judge = ClubJudge(club_id=club.id, judge_id=user.id)
+    db.add(judge)
+    db.commit()
+    
+    return {
+        "id": club.id,
+        "title": club.title,
+        "city": club.city,
+        "president_id": club.president_id,
+        "president_name": user.username,
+        "logo_url": club.logo_url,
+        "judges_count": 1,
+        "is_official": club.is_official,
+        "created_at": club.created_at,
+    }
+
+# ---------- ПОЛУЧИТЬ КЛУБ ПО ID ----------
+@router.get("/clubs/{club_id}", response_model=ClubDetailResponse)
+async def get_club(
+    club_id: int,
+    token: str,
+    db: Session = Depends(get_db)
+):
+    get_current_user(token, db)
+    
+    club = db.query(Club).filter(Club.id == club_id).first()
+    if not club:
+        raise HTTPException(status_code=404, detail="Клуб не найден")
+    
+    president = db.query(User).filter(User.id == club.president_id).first()
+    judges_count = db.query(ClubJudge).filter(ClubJudge.club_id == club.id).count()
+    
+    return {
+        "id": club.id,
+        "title": club.title,
+        "city": club.city,
+        "president_id": club.president_id,
+        "president_name": president.username if president else None,
+        "logo_url": club.logo_url,
+        "judges_count": judges_count,
+        "is_official": club.is_official,
+        "created_at": club.created_at,
+    }
+
+# ---------- ПОЛУЧИТЬ МОИ КЛУБЫ ----------
+@router.get("/my-clubs", response_model=List[ClubResponse])
+async def get_my_clubs(
+    token: str,
+    db: Session = Depends(get_db)
+):
+    user = get_current_user(token, db)
+    
+    judges = db.query(ClubJudge).filter(ClubJudge.judge_id == user.id).all()
+    club_ids = [j.club_id for j in judges]
+    clubs = db.query(Club).filter(Club.id.in_(club_ids)).all()
+    
+    result = []
+    for club in clubs:
+        president = db.query(User).filter(User.id == club.president_id).first()
+        judges_count = db.query(ClubJudge).filter(ClubJudge.club_id == club.id).count()
+        result.append({
+            "id": club.id,
+            "title": club.title,
+            "city": club.city,
+            "president_id": club.president_id,
+            "president_name": president.username if president else None,
+            "logo_url": club.logo_url,
+            "judges_count": judges_count,
+            "is_official": club.is_official,
+            "is_member": True,
+            "is_pending": False,
+            "created_at": club.created_at,
+        })
+    return result
+
+# ============================================================
+# ЗАЯВКИ
+# ============================================================
+
+# ---------- ПОДАТЬ ЗАЯВКУ ----------
+@router.post("/clubs/{club_id}/join")
+async def join_club(
+    club_id: int,
+    token: str,
+    db: Session = Depends(get_db)
+):
+    user = get_current_user(token, db)
+    
+    club = db.query(Club).filter(Club.id == club_id).first()
+    if not club:
+        raise HTTPException(status_code=404, detail="Клуб не найден")
+    
+    # Проверка, не состоит ли уже
+    existing = db.query(ClubJudge).filter(
+        ClubJudge.club_id == club_id,
+        ClubJudge.judge_id == user.id
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Вы уже в этом клубе")
+    
+    # Проверка, нет ли уже заявки
+    existing_request = db.query(ClubRequest).filter(
+        ClubRequest.club_id == club_id,
+        ClubRequest.user_id == user.id,
+        ClubRequest.status == "pending"
+    ).first()
+    if existing_request:
+        raise HTTPException(status_code=400, detail="Заявка уже отправлена")
+    
+    request = ClubRequest(
+        club_id=club_id,
+        user_id=user.id,
+        status="pending"
+    )
+    db.add(request)
+    db.commit()
+    
+    return {"message": "Заявка отправлена"}
+
+# ---------- ПОЛУЧИТЬ ЗАЯВКИ КЛУБА ----------
+@router.get("/clubs/{club_id}/requests")
+async def get_club_requests(
+    club_id: int,
+    token: str,
+    db: Session = Depends(get_db)
+):
+    user = get_current_user(token, db)
+    
+    club = db.query(Club).filter(Club.id == club_id).first()
+    if not club:
+        raise HTTPException(status_code=404, detail="Клуб не найден")
+    
+    if club.president_id != user.id:
+        raise HTTPException(status_code=403, detail="Только президент может просматривать заявки")
+    
+    requests = db.query(ClubRequest).filter(
+        ClubRequest.club_id == club_id,
+        ClubRequest.status == "pending"
+    ).all()
+    
+    result = []
+    for req in requests:
+        applicant = db.query(User).filter(User.id == req.user_id).first()
+        result.append({
+            "id": req.id,
+            "user_id": req.user_id,
+            "username": applicant.username if applicant else "Неизвестен",
+            "email": applicant.email if applicant else "",
+            "created_at": req.created_at,
+        })
+    
+    return result
+
+# ---------- ПРИНЯТЬ ЗАЯВКУ ----------
+@router.post("/clubs/requests/{request_id}/approve")
+async def approve_request(
+    request_id: int,
+    token: str,
+    db: Session = Depends(get_db)
+):
+    user = get_current_user(token, db)
+    
+    request = db.query(ClubRequest).filter(ClubRequest.id == request_id).first()
+    if not request:
+        raise HTTPException(status_code=404, detail="Заявка не найдена")
+    
+    club = db.query(Club).filter(Club.id == request.club_id).first()
+    if not club:
+        raise HTTPException(status_code=404, detail="Клуб не найден")
+    
+    if club.president_id != user.id:
+        raise HTTPException(status_code=403, detail="Только президент может принимать заявки")
+    
+    judge = ClubJudge(
+        club_id=club.id,
+        judge_id=request.user_id
+    )
+    db.add(judge)
+    request.status = "approved"
+    db.commit()
+    
+    return {"message": "Заявка принята"}
+
+# ---------- ОТКЛОНИТЬ ЗАЯВКУ ----------
+@router.post("/clubs/requests/{request_id}/reject")
+async def reject_request(
+    request_id: int,
+    token: str,
+    db: Session = Depends(get_db)
+):
+    user = get_current_user(token, db)
+    
+    request = db.query(ClubRequest).filter(ClubRequest.id == request_id).first()
+    if not request:
+        raise HTTPException(status_code=404, detail="Заявка не найдена")
+    
+    club = db.query(Club).filter(Club.id == request.club_id).first()
+    if not club:
+        raise HTTPException(status_code=404, detail="Клуб не найден")
+    
+    if club.president_id != user.id:
+        raise HTTPException(status_code=403, detail="Только президент может отклонять заявки")
+    
+    request.status = "rejected"
+    db.commit()
+    
+    return {"message": "Заявка отклонена"}
+
+# ============================================================
+# УЧАСТНИКИ (ТОЛЬКО ДЛЯ ПРЕЗИДЕНТА)
+# ============================================================
+
+# ---------- ПОЛУЧИТЬ УЧАСТНИКОВ КЛУБА ----------
+@router.get("/clubs/{club_id}/members")
+async def get_club_members(
+    club_id: int,
+    token: str,
+    db: Session = Depends(get_db)
+):
+    user = get_current_user(token, db)
+    
+    club = db.query(Club).filter(Club.id == club_id).first()
+    if not club:
+        raise HTTPException(status_code=404, detail="Клуб не найден")
+    
+    if club.president_id != user.id:
+        raise HTTPException(status_code=403, detail="Только президент может просматривать участников")
+    
+    judges = db.query(ClubJudge).filter(ClubJudge.club_id == club_id).all()
+    
+    members = []
+    judges_list = []
+    
+    for judge in judges:
+        u = db.query(User).filter(User.id == judge.judge_id).first()
+        if not u:
+            continue
+        
+        is_president = (judge.judge_id == club.president_id)
+        
+        member_data = {
+            "id": u.id,
+            "username": u.username,
+            "email": u.email,
+            "is_president": is_president,
+            "is_judge": True,
+            "joined_at": judge.created_at,
+        }
+        members.append(member_data)
+        
+        if not is_president:
+            judges_list.append(member_data)
+    
+    return {
+        "members": members,
+        "judges": judges_list,
+    }
+
+# ---------- УДАЛИТЬ УЧАСТНИКА ----------
+@router.delete("/clubs/{club_id}/members/{user_id}")
+async def remove_member(
+    club_id: int,
+    user_id: int,
+    token: str,
+    db: Session = Depends(get_db)
+):
+    current_user = get_current_user(token, db)
+    
+    club = db.query(Club).filter(Club.id == club_id).first()
+    if not club:
+        raise HTTPException(status_code=404, detail="Клуб не найден")
+    
+    if club.president_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Только президент может удалять участников")
+    
+    if club.president_id == user_id:
+        raise HTTPException(status_code=400, detail="Нельзя удалить президента клуба")
+    
+    judge = db.query(ClubJudge).filter(
+        ClubJudge.club_id == club_id,
+        ClubJudge.judge_id == user_id
+    ).first()
+    if not judge:
+        raise HTTPException(status_code=404, detail="Пользователь не состоит в клубе")
+    
+    db.delete(judge)
+    db.commit()
+    
+    return {"message": "Участник удалён из клуба"}
+
+# ---------- ВЫЙТИ ИЗ КЛУБА ----------
+@router.delete("/clubs/{club_id}/leave")
+async def leave_club(
+    club_id: int,
+    token: str,
+    db: Session = Depends(get_db)
+):
+    user = get_current_user(token, db)
+    
+    club = db.query(Club).filter(Club.id == club_id).first()
+    if not club:
+        raise HTTPException(status_code=404, detail="Клуб не найден")
+    
+    if club.president_id == user.id:
+        raise HTTPException(status_code=400, detail="Президент не может покинуть свой клуб")
+    
+    judge = db.query(ClubJudge).filter(
+        ClubJudge.club_id == club_id,
+        ClubJudge.judge_id == user.id
+    ).first()
+    if not judge:
+        raise HTTPException(status_code=404, detail="Вы не состоите в этом клубе")
+    
+    db.delete(judge)
+    db.commit()
+    
+    return {"message": "Вы вышли из клуба"}
+
+# ---------- НАЗНАЧИТЬ СУДЬЁЙ ----------
+@router.post("/clubs/{club_id}/promote/{user_id}")
+async def promote_to_judge(
+    club_id: int,
+    user_id: int,
+    token: str,
+    db: Session = Depends(get_db)
+):
+    current_user = get_current_user(token, db)
+    
+    club = db.query(Club).filter(Club.id == club_id).first()
+    if not club:
+        raise HTTPException(status_code=404, detail="Клуб не найден")
+    
+    if club.president_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Только президент может назначать судей")
+    
+    judge = db.query(ClubJudge).filter(
+        ClubJudge.club_id == club_id,
+        ClubJudge.judge_id == user_id
+    ).first()
+    if not judge:
+        raise HTTPException(status_code=404, detail="Пользователь не состоит в клубе")
+    
+    return {"message": "Пользователь назначен судьёй"}
+
+# ---------- СНЯТЬ С ДОЛЖНОСТИ СУДЬИ ----------
+@router.post("/clubs/{club_id}/demote/{user_id}")
+async def demote_from_judge(
+    club_id: int,
+    user_id: int,
+    token: str,
+    db: Session = Depends(get_db)
+):
+    current_user = get_current_user(token, db)
+    
+    club = db.query(Club).filter(Club.id == club_id).first()
+    if not club:
+        raise HTTPException(status_code=404, detail="Клуб не найден")
+    
+    if club.president_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Только президент может снимать судей")
+    
+    if club.president_id == user_id:
+        raise HTTPException(status_code=400, detail="Нельзя снять президента")
+    
+    judge = db.query(ClubJudge).filter(
+        ClubJudge.club_id == club_id,
+        ClubJudge.judge_id == user_id
+    ).first()
+    if not judge:
+        raise HTTPException(status_code=404, detail="Пользователь не состоит в клубе")
+    
+    return {"message": "Судья снят с должности"}
