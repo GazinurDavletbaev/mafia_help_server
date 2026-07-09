@@ -18,6 +18,9 @@ router = APIRouter()
 class ClubCreate(BaseModel):
     title: str
     city: Optional[str] = None
+    description: Optional[str] = None      # ✅ НОВОЕ
+    country: Optional[str] = None          # ✅ НОВОЕ
+    region: Optional[str] = None           # ✅ НОВОЕ
 
 class ClubResponse(BaseModel):
     id: int
@@ -38,6 +41,9 @@ class ClubDetailResponse(BaseModel):
     city: Optional[str]
     president_id: int
     president_name: Optional[str]
+    description: Optional[str] = None      # ✅ ДОБАВЛЕНО
+    country: Optional[str] = None          # ✅ ДОБАВЛЕНО
+    region: Optional[str] = None           # ✅ ДОБАВЛЕНО
     logo_url: Optional[str]
     judges_count: int
     is_official: bool
@@ -93,6 +99,9 @@ async def get_clubs(
             "city": club.city,
             "president_id": club.president_id,
             "president_name": president.username if president else None,
+            "description": club.description,        # ✅ ДОБАВЛЕНО
+            "country": club.country,                # ✅ ДОБАВЛЕНО
+            "region": club.region,                  # ✅ ДОБАВЛЕНО
             "logo_url": club.logo_url,
             "judges_count": judges_count,
             "is_official": club.is_official,
@@ -128,6 +137,9 @@ async def create_club(
         title=club_data.title,
         city=club_data.city,
         president_id=user.id,
+        description=club_data.description,    # ✅ ДОБАВЛЕНО
+        country=club_data.country,            # ✅ ДОБАВЛЕНО
+        region=club_data.region,              # ✅ ДОБАВЛЕНО
         is_official=False,
     )
     db.add(club)
@@ -145,6 +157,9 @@ async def create_club(
         "city": club.city,
         "president_id": club.president_id,
         "president_name": user.username,
+        "description": club.description,      # ✅ ДОБАВЛЕНО
+        "country": club.country,              # ✅ ДОБАВЛЕНО
+        "region": club.region,                # ✅ ДОБАВЛЕНО
         "logo_url": club.logo_url,
         "judges_count": 1,
         "is_official": club.is_official,
@@ -424,7 +439,7 @@ async def remove_member(
 
 # ---------- ВЫЙТИ ИЗ КЛУБА ----------
 # ---------- ВЫЙТИ ИЗ КЛУБА ----------
-@router.delete("/clubs/{club_id}/leave")
+@router.delete("/{club_id}/leave")
 async def leave_club(
     club_id: int,
     token: str,
@@ -469,7 +484,8 @@ async def leave_club(
         
         # 4. Удаляем рейтинг клуба
         db.query(ClubRating).filter(ClubRating.club_id == club_id).delete()
-        
+        # 3.1 Удаляем все заявки в клуб
+        db.query(ClubRequest).filter(ClubRequest.club_id == club_id).delete(synchronize_session=False)
         # 5. Удаляем сам клуб
         db.delete(club)
         db.commit()

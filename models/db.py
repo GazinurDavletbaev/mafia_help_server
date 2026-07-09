@@ -48,6 +48,9 @@ class Club(Base):
     title = Column(String(100), nullable=False)
     city = Column(String(100), nullable=True)
     president_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    description = Column(Text, nullable=True)      # ✅ НОВОЕ
+    country = Column(String(100), nullable=True)   # ✅ НОВОЕ
+    region = Column(String(100), nullable=True)    # ✅ НОВОЕ
     logo_url = Column(String(255), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
