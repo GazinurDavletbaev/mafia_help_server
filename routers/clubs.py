@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from datetime import datetime
 from sqlalchemy import extract
 
-from models.db import User, Club, ClubJudge, ClubRequest
+from models.db import User, Club, ClubJudge, ClubRequest, Game, GamePlayer, NightAction, VoteItem, VoteRound, ClubRating
 from core.database import get_db
 from core.security import decode_token
 
@@ -347,7 +347,7 @@ async def reject_request(
 # УЧАСТНИКИ (ТОЛЬКО ДЛЯ ПРЕЗИДЕНТА)
 # ============================================================
 
-# ---------- ПОЛУЧИТЬ УЧАСТНИКОВ КЛУБА ----------
+# ---------- ПОЛУЧИТЬ УЧАСТНИКОВ КЛУБА ------@router.get("/clubs/{club_id}/members")
 @router.get("/clubs/{club_id}/members")
 async def get_club_members(
     club_id: int,
@@ -360,9 +360,7 @@ async def get_club_members(
     if not club:
         raise HTTPException(status_code=404, detail="Клуб не найден")
     
-    if club.president_id != user.id:
-        raise HTTPException(status_code=403, detail="Только президент может просматривать участников")
-    
+    # ✅ Убираем проверку — все могут смотреть участников
     judges = db.query(ClubJudge).filter(ClubJudge.club_id == club_id).all()
     
     members = []
@@ -392,7 +390,6 @@ async def get_club_members(
         "members": members,
         "judges": judges_list,
     }
-
 # ---------- УДАЛИТЬ УЧАСТНИКА ----------
 @router.delete("/clubs/{club_id}/members/{user_id}")
 async def remove_member(
@@ -426,6 +423,7 @@ async def remove_member(
     return {"message": "Участник удалён из клуба"}
 
 # ---------- ВЫЙТИ ИЗ КЛУБА ----------
+# ---------- ВЫЙТИ ИЗ КЛУБА ----------
 @router.delete("/clubs/{club_id}/leave")
 async def leave_club(
     club_id: int,
@@ -438,20 +436,55 @@ async def leave_club(
     if not club:
         raise HTTPException(status_code=404, detail="Клуб не найден")
     
-    if club.president_id == user.id:
-        raise HTTPException(status_code=400, detail="Президент не может покинуть свой клуб")
+    # Проверяем, является ли пользователь президентом
+    is_president = club.president_id == user.id
     
-    judge = db.query(ClubJudge).filter(
+    # Проверяем, является ли пользователь участником клуба
+    is_member = db.query(ClubJudge).filter(
         ClubJudge.club_id == club_id,
         ClubJudge.judge_id == user.id
     ).first()
-    if not judge:
-        raise HTTPException(status_code=404, detail="Вы не состоите в этом клубе")
     
-    db.delete(judge)
-    db.commit()
+    if not is_member:
+        raise HTTPException(status_code=403, detail="Вы не состоите в этом клубе")
     
-    return {"message": "Вы вышли из клуба"}
+    # Если пользователь — президент, удаляем клуб со всеми данными
+    if is_president:
+        # 1. Получаем все игры клуба
+        games = db.query(Game).filter(Game.club_id == club_id).all()
+        game_ids = [game.id for game in games]
+        
+        # 2. Удаляем всё, что связано с играми
+        if game_ids:
+            db.query(NightAction).filter(NightAction.game_id.in_(game_ids)).delete(synchronize_session=False)
+            db.query(VoteItem).filter(VoteItem.vote_round_id.in_(
+                db.query(VoteRound.id).filter(VoteRound.game_id.in_(game_ids))
+            )).delete(synchronize_session=False)
+            db.query(VoteRound).filter(VoteRound.game_id.in_(game_ids)).delete(synchronize_session=False)
+            db.query(GamePlayer).filter(GamePlayer.game_id.in_(game_ids)).delete(synchronize_session=False)
+            db.query(Game).filter(Game.id.in_(game_ids)).delete(synchronize_session=False)
+        
+        # 3. Удаляем связи участников
+        db.query(ClubJudge).filter(ClubJudge.club_id == club_id).delete()
+        
+        # 4. Удаляем рейтинг клуба
+        db.query(ClubRating).filter(ClubRating.club_id == club_id).delete()
+        
+        # 5. Удаляем сам клуб
+        db.delete(club)
+        db.commit()
+        
+        return {"message": "Клуб удалён. Все данные стёрты."}
+    
+    else:
+        # Обычный участник — просто выходит
+        db.query(ClubJudge).filter(
+            ClubJudge.club_id == club_id,
+            ClubJudge.judge_id == user.id
+        ).delete()
+        db.commit()
+        
+        return {"message": "Вы покинули клуб"}
 
 # ---------- НАЗНАЧИТЬ СУДЬЁЙ ----------
 @router.post("/clubs/{club_id}/promote/{user_id}")
@@ -544,16 +577,8 @@ async def get_club_rating(
     if not club:
         raise HTTPException(status_code=404, detail="Клуб не найден")
     
-    # Проверяем, что пользователь состоит в клубе
-    is_member = db.query(ClubJudge).filter(
-        ClubJudge.club_id == club_id,
-        ClubJudge.judge_id == user.id
-    ).first() is not None
+    # ✅ Убираем проверку — все могут смотреть рейтинг
     
-    if not is_member:
-        raise HTTPException(status_code=403, detail="Вы не состоите в этом клубе")
-    
-    # Получаем игры за указанный месяц
     games = db.query(Game).filter(
         Game.club_id == club_id,
         extract('year', Game.game_date) == year,
@@ -570,7 +595,6 @@ async def get_club_rating(
             "players": [],
         }
     
-    # Статистика игроков
     stats = {}
     
     for game in games:
@@ -592,7 +616,6 @@ async def get_club_rating(
             elif game.winner == "black" and gp.role in ["mafia", "don"]:
                 stats[gp.user_id]["wins"] += 1
     
-    # Сортируем по очкам
     sorted_players = sorted(
         stats.values(),
         key=lambda x: x["points"] + x["bonus"],

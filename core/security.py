@@ -6,8 +6,18 @@ from config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
 # ✅ Используем sha256_crypt (не требует bcrypt)
 pwd_context = CryptContext(schemes=["sha256_crypt"], deprecated="auto")
 
-def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    print(f"🔍 Проверка пароля: {plain_password}")
+    print(f"🔍 Хэш из БД: {hashed_password}")
+    
+    if not hashed_password:
+        print("❌ Хэш пустой")
+        return False
+    
+    # ✅ УБИРАЕМ ПРОВЕРКУ НА $2b$
+    result = pwd_context.verify(plain_password, hashed_password)
+    print(f"✅ Результат: {result}")
+    return result
 
 def get_password_hash(password):
     return pwd_context.hash(password)
