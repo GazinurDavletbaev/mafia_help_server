@@ -67,7 +67,7 @@ def get_current_user(token: str, db: Session):
 # ЭНДПОИНТЫ КЛУБОВ
 # ============================================================
 
-# ---------- ПОЛУЧИТЬ ВСЕ КЛУБЫ ----------
+# ---------- ПОЛУЧИТЬ ВСЕ КЛУБЫ -------
 @router.get("/clubs", response_model=List[ClubResponse])
 async def get_clubs(
     token: str,

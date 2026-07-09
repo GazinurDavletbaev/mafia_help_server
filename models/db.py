@@ -14,6 +14,13 @@ class User(Base):
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
+    # ✅ НОВЫЕ ПОЛЯ ДЛЯ ПРОФИЛЯ
+    first_name = Column(String(100), nullable=True)   # ✅ ДОБАВИТЬ
+    last_name = Column(String(100), nullable=True)    # ✅ ДОБАВИТЬ
+    country = Column(String(100), nullable=True)      # ✅ ДОБАВИТЬ
+    city = Column(String(100), nullable=True)         # ✅ ДОБАВИТЬ
+    region = Column(String(100), nullable=True)       # ✅ ДОБАВИТЬ
+
     # Телефон
     phone = Column(String(20), unique=True, nullable=True)
     phone_verified = Column(Boolean, default=False)
