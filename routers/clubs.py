@@ -295,48 +295,6 @@ async def upload_club_logo(
     
     return {"logo_url": logo_url}
 
-# ---------- ПОЛУЧИТЬ МОИ КЛУБЫ ----------
-@router.get("/my-club")
-async def get_my_club(
-    token: str,
-    db: Session = Depends(get_db)
-):
-    user = get_current_user(token, db)
-    print(f"📦 user.id: {user.id}")  # ✅ ДОБАВЬ
-    
-    # Ищем клуб, где пользователь — президент
-    club = db.query(Club).filter(Club.president_id == user.id).first()
-    print(f"📦 club as president: {club}")  # ✅ ДОБАВЬ
-    
-    if not club:
-        # Ищем в club_judges
-        judge = db.query(ClubJudge).filter(ClubJudge.judge_id == user.id).first()
-        print(f"📦 judge: {judge}")  # ✅ ДОБАВЬ
-        if judge:
-            club = db.query(Club).filter(Club.id == judge.club_id).first()
-            print(f"📦 club from judge: {club}")  # ✅ ДОБАВЬ
-    
-    if not club:
-        return {"club": None}
-    
-    president = db.query(User).filter(User.id == club.president_id).first()
-    judges_count = db.query(ClubJudge).filter(ClubJudge.club_id == club.id).count()
-    
-    return {
-        "id": club.id,
-        "title": club.title,
-        "city": club.city,
-        "description": club.description,
-        "country": club.country,
-        "region": club.region,
-        "logo_url": club.logo_url,
-        "president_id": club.president_id,
-        "president_name": president.username if president else None,
-        "judges_count": judges_count,
-        "is_official": club.is_official,
-        "created_at": club.created_at,
-    }
-
 # ============================================================
 # ЗАЯВКИ
 # ============================================================
