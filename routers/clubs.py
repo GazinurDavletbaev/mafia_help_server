@@ -302,14 +302,19 @@ async def get_my_club(
     db: Session = Depends(get_db)
 ):
     user = get_current_user(token, db)
+    print(f"📦 user.id: {user.id}")  # ✅ ДОБАВЬ
     
-    # Ищем клуб, где пользователь — президент или участник
+    # Ищем клуб, где пользователь — президент
     club = db.query(Club).filter(Club.president_id == user.id).first()
+    print(f"📦 club as president: {club}")  # ✅ ДОБАВЬ
+    
     if not club:
-        # Если не президент, ищем в club_judges
+        # Ищем в club_judges
         judge = db.query(ClubJudge).filter(ClubJudge.judge_id == user.id).first()
+        print(f"📦 judge: {judge}")  # ✅ ДОБАВЬ
         if judge:
             club = db.query(Club).filter(Club.id == judge.club_id).first()
+            print(f"📦 club from judge: {club}")  # ✅ ДОБАВЬ
     
     if not club:
         return {"club": None}
