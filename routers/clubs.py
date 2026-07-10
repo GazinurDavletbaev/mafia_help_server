@@ -1,16 +1,18 @@
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, HTTPException, Depends, status, File, UploadFile
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime
 from sqlalchemy import extract
-
+import os
+import shutil
 from models.db import User, Club, ClubJudge, ClubRequest, Game, GamePlayer, NightAction, VoteItem, VoteRound, ClubRating
 from core.database import get_db
 from core.security import decode_token
 
 router = APIRouter()
-
+UPLOAD_DIR = "/root/mafia_excel_api/uploads/avatars"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 # ============================================================
 # СХЕМЫ
 # ============================================================
@@ -49,6 +51,14 @@ class ClubDetailResponse(BaseModel):
     is_official: bool
     created_at: datetime
 
+class ClubUpdate(BaseModel):
+    title: Optional[str] = None
+    city: Optional[str] = None
+    description: Optional[str] = None
+    country: Optional[str] = None
+    region: Optional[str] = None
+    logo_url: Optional[str] = None
+
 # ============================================================
 # ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 # ============================================================
@@ -68,7 +78,7 @@ def get_current_user(token: str, db: Session):
 # ============================================================
 
 # ---------- ПОЛУЧИТЬ ВСЕ КЛУБЫ -------
-@router.get("/clubs", response_model=List[ClubResponse])
+@router.get("/", response_model=List[ClubResponse])
 async def get_clubs(
     token: str,
     db: Session = Depends(get_db)
@@ -115,7 +125,7 @@ async def get_clubs(
     return result
 
 # ---------- СОЗДАТЬ КЛУБ ----------
-@router.post("/clubs", response_model=ClubDetailResponse)
+@router.post("/", response_model=ClubDetailResponse)
 async def create_club(
     club_data: ClubCreate,
     token: str,
@@ -167,7 +177,7 @@ async def create_club(
     }
 
 # ---------- ПОЛУЧИТЬ КЛУБ ПО ID ----------
-@router.get("/clubs/{club_id}", response_model=ClubDetailResponse)
+@router.get("/{club_id}", response_model=ClubDetailResponse)
 async def get_club(
     club_id: int,
     token: str,
@@ -193,6 +203,97 @@ async def get_club(
         "is_official": club.is_official,
         "created_at": club.created_at,
     }
+
+@router.put("/{club_id}")
+async def update_club(
+    club_id: int,
+    club_data: ClubUpdate,
+    token: str,
+    db: Session = Depends(get_db)
+):
+    user = get_current_user(token, db)
+    
+    club = db.query(Club).filter(Club.id == club_id).first()
+    if not club:
+        raise HTTPException(status_code=404, detail="Клуб не найден")
+    
+    # Проверяем, что пользователь — президент
+    if club.president_id != user.id:
+        raise HTTPException(status_code=403, detail="Только президент может редактировать клуб")
+    
+    # Обновляем поля
+    if club_data.title is not None:
+        # Проверяем дубликат названия
+        existing = db.query(Club).filter(
+            Club.title == club_data.title,
+            Club.id != club_id
+        ).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Клуб с таким названием уже существует")
+        club.title = club_data.title
+    
+    if club_data.city is not None:
+        club.city = club_data.city
+    if club_data.description is not None:
+        club.description = club_data.description
+    if club_data.country is not None:
+        club.country = club_data.country
+    if club_data.region is not None:
+        club.region = club_data.region
+    if club_data.logo_url is not None:
+        club.logo_url = club_data.logo_url
+    
+    db.commit()
+    db.refresh(club)
+    
+    # Получаем президента и количество участников
+    president = db.query(User).filter(User.id == club.president_id).first()
+    judges_count = db.query(ClubJudge).filter(ClubJudge.club_id == club.id).count()
+    
+    return {
+        "id": club.id,
+        "title": club.title,
+        "city": club.city,
+        "description": club.description,
+        "country": club.country,
+        "region": club.region,
+        "logo_url": club.logo_url,
+        "president_id": club.president_id,
+        "president_name": president.username if president else None,
+        "judges_count": judges_count,
+        "is_official": club.is_official,
+        "created_at": club.created_at,
+    }
+
+# ========== ЗАГРУЗИТЬ ЛОГОТИП КЛУБА ==========
+@router.post("/{club_id}/upload-logo")
+async def upload_club_logo(
+    club_id: int,
+    token: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    user = get_current_user(token, db)
+    
+    club = db.query(Club).filter(Club.id == club_id).first()
+    if not club:
+        raise HTTPException(status_code=404, detail="Клуб не найден")
+    
+    if club.president_id != user.id:
+        raise HTTPException(status_code=403, detail="Только президент может менять логотип")
+    
+    ext = file.filename.split('.')[-1] if '.' in file.filename else 'jpg'
+    filename = f"club_{club_id}_{datetime.now().timestamp()}.{ext}"
+    file_path = os.path.join(UPLOAD_DIR, filename)
+    
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    
+    logo_url = f"http://161.104.46.234:8001/uploads/avatars/{filename}"
+    club.logo_url = logo_url
+    db.commit()
+    
+    return {"logo_url": logo_url}
 
 # ---------- ПОЛУЧИТЬ МОИ КЛУБЫ ----------
 @router.get("/my-clubs", response_model=List[ClubResponse])
@@ -230,7 +331,7 @@ async def get_my_clubs(
 # ============================================================
 
 # ---------- ПОДАТЬ ЗАЯВКУ ----------
-@router.post("/clubs/{club_id}/join")
+@router.post("/{club_id}/join")
 async def join_club(
     club_id: int,
     token: str,
@@ -270,7 +371,7 @@ async def join_club(
     return {"message": "Заявка отправлена"}
 
 # ---------- ПОЛУЧИТЬ ЗАЯВКИ КЛУБА ----------
-@router.get("/clubs/{club_id}/requests")
+@router.get("/{club_id}/requests")
 async def get_club_requests(
     club_id: int,
     token: str,
@@ -304,7 +405,7 @@ async def get_club_requests(
     return result
 
 # ---------- ПРИНЯТЬ ЗАЯВКУ ----------
-@router.post("/clubs/requests/{request_id}/approve")
+@router.post("/requests/{request_id}/approve")
 async def approve_request(
     request_id: int,
     token: str,
@@ -334,7 +435,7 @@ async def approve_request(
     return {"message": "Заявка принята"}
 
 # ---------- ОТКЛОНИТЬ ЗАЯВКУ ----------
-@router.post("/clubs/requests/{request_id}/reject")
+@router.post("/requests/{request_id}/reject")
 async def reject_request(
     request_id: int,
     token: str,
@@ -363,7 +464,7 @@ async def reject_request(
 # ============================================================
 
 # ---------- ПОЛУЧИТЬ УЧАСТНИКОВ КЛУБА ------@router.get("/clubs/{club_id}/members")
-@router.get("/clubs/{club_id}/members")
+@router.get("/{club_id}/members")
 async def get_club_members(
     club_id: int,
     token: str,
@@ -375,38 +476,25 @@ async def get_club_members(
     if not club:
         raise HTTPException(status_code=404, detail="Клуб не найден")
     
-    # ✅ Убираем проверку — все могут смотреть участников
     judges = db.query(ClubJudge).filter(ClubJudge.club_id == club_id).all()
     
     members = []
-    judges_list = []
-    
     for judge in judges:
         u = db.query(User).filter(User.id == judge.judge_id).first()
         if not u:
             continue
         
-        is_president = (judge.judge_id == club.president_id)
-        
-        member_data = {
+        members.append({
             "id": u.id,
             "username": u.username,
             "email": u.email,
-            "is_president": is_president,
-            "is_judge": True,
+            "is_president": judge.judge_id == club.president_id,
             "joined_at": judge.created_at,
-        }
-        members.append(member_data)
-        
-        if not is_president:
-            judges_list.append(member_data)
+        })
     
-    return {
-        "members": members,
-        "judges": judges_list,
-    }
+    return {"members": members}
 # ---------- УДАЛИТЬ УЧАСТНИКА ----------
-@router.delete("/clubs/{club_id}/members/{user_id}")
+@router.delete("/{club_id}/members/{user_id}")
 async def remove_member(
     club_id: int,
     user_id: int,
@@ -503,7 +591,7 @@ async def leave_club(
         return {"message": "Вы покинули клуб"}
 
 # ---------- НАЗНАЧИТЬ СУДЬЁЙ ----------
-@router.post("/clubs/{club_id}/promote/{user_id}")
+@router.post("/{club_id}/promote/{user_id}")
 async def promote_to_judge(
     club_id: int,
     user_id: int,
@@ -529,7 +617,7 @@ async def promote_to_judge(
     return {"message": "Пользователь назначен судьёй"}
 
 # ---------- СНЯТЬ С ДОЛЖНОСТИ СУДЬИ ----------
-@router.post("/clubs/{club_id}/demote/{user_id}")
+@router.post("/{club_id}/demote/{user_id}")
 async def demote_from_judge(
     club_id: int,
     user_id: int,
@@ -579,7 +667,7 @@ async def get_pending_requests_count(
     return {"count": count}
 
 # ========== РЕЙТИНГ КЛУБА ЗА МЕСЯЦ ==========
-@router.get("/clubs/{club_id}/rating")
+@router.get("/{club_id}/rating")
 async def get_club_rating(
     club_id: int,
     month: int,
