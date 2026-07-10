@@ -78,7 +78,7 @@ def get_current_user(token: str, db: Session):
 # ============================================================
 
 # ---------- ПОЛУЧИТЬ ВСЕ КЛУБЫ -------
-@router.get("/", response_model=List[ClubResponse])
+@router.get("", response_model=List[ClubResponse])
 async def get_clubs(
     token: str,
     db: Session = Depends(get_db)
