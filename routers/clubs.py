@@ -125,7 +125,7 @@ async def get_clubs(
     return result
 
 # ---------- СОЗДАТЬ КЛУБ ----------
-@router.post("/", response_model=ClubDetailResponse)
+@router.post("", response_model=ClubDetailResponse)
 async def create_club(
     club_data: ClubCreate,
     token: str,
