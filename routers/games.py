@@ -19,7 +19,7 @@ async def get_club_games(
     token: str,
     db: Session = Depends(get_db)
 ):
-    user = get_current_user(token, db)
+    user = await get_current_user(token, db)  # ✅ ДОБАВИТЬ await
     
     # Проверяем доступ к клубу
     is_member = db.query(ClubJudge).filter(
