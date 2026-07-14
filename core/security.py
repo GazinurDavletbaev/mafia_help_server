@@ -2,6 +2,11 @@ from datetime import datetime, timedelta
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from sqlalchemy.orm import Session
+from core.database import get_db
+from models.db import User
 
 # ✅ Используем sha256_crypt (не требует bcrypt)
 pwd_context = CryptContext(schemes=["sha256_crypt"], deprecated="auto")
@@ -14,7 +19,6 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         print("❌ Хэш пустой")
         return False
     
-    # ✅ УБИРАЕМ ПРОВЕРКУ НА $2b$
     result = pwd_context.verify(plain_password, hashed_password)
     print(f"✅ Результат: {result}")
     return result
@@ -38,3 +42,25 @@ def decode_token(token: str):
         return payload
     except JWTError:
         return None
+
+security = HTTPBearer()
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+) -> User:
+    token = credentials.credentials
+    payload = decode_token(token)
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Недействительный токен"
+        )
+    user_id = int(payload.get("sub"))
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Пользователь не найден"
+        )
+    return user
