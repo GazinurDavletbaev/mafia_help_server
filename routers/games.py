@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from core.database import get_db
 from sqlalchemy.orm import Session
-from core.security import decode_token, get_current_user
+from core.security import get_current_user
 from models.db import User, Club, Game, GamePlayer, NightAction, VoteRound, VoteItem, ClubJudge
+
 router = APIRouter()
 
 @router.post("/save")
@@ -16,15 +17,13 @@ async def get_history(club_id: int):
 @router.get("/club/{club_id}")
 async def get_club_games(
     club_id: int,
-    token: str,
+    current_user: User = Depends(get_current_user),  # ✅ ТАК
     db: Session = Depends(get_db)
 ):
-    user = await get_current_user(token, db)  # ✅ ДОБАВИТЬ await
-    
     # Проверяем доступ к клубу
     is_member = db.query(ClubJudge).filter(
         ClubJudge.club_id == club_id,
-        ClubJudge.judge_id == user.id
+        ClubJudge.judge_id == current_user.id
     ).first() is not None
     
     if not is_member:
