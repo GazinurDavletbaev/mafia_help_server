@@ -15,7 +15,7 @@ class PlayerData(BaseModel):
     fouls: int
     points: int
     bonus: float
-    rule: str = ""
+    rule: str = ""  # ✅ ДОБАВЛЕНО
 
 class ProtocolData(BaseModel):
     tournament: str
@@ -67,11 +67,10 @@ async def generate_protocol(data: ProtocolData):
         print(f"📊 players: {len(data.players)}")
         print("-" * 60)
 
-        # Загружаем шаблон
         wb = load_workbook("blank_protocol2.xlsx")
         ws = wb.active
 
-        # ========== 1. ШАПКА ==========
+        # Шапка
         ws['O4'] = data.tournament if data.tournament else ""
         ws['BA4'] = data.stage if data.stage else ""
         ws['K7'] = data.date if data.date else ""
@@ -79,7 +78,7 @@ async def generate_protocol(data: ProtocolData):
         ws['AQ7'] = data.table if data.table else ""
         ws['BE7'] = data.game if data.game else ""
 
-        # ========== 2. ТАБЛИЦА ИГРОКОВ ==========
+        # Игроки
         player_rows = [14, 18, 22, 26, 30, 34, 38, 42, 46, 50]
         for i, player in enumerate(data.players):
             if i >= 10:
@@ -91,7 +90,7 @@ async def generate_protocol(data: ProtocolData):
             ws[f'AU{row}'] = player.points
             ws[f'BB{row}'] = player.bonus
 
-        # ========== 3. ИНФОРМАЦИЯ ==========
+        # Информация
         winner_text = "КРАСНЫЕ" if data.winner == 'red' else 'ЧЁРНЫЕ'
         ws['AG55'] = winner_text
 
@@ -114,7 +113,7 @@ async def generate_protocol(data: ProtocolData):
         ws['T67'] = data.protest if data.protest else ""
         ws['Q71'] = data.judge if data.judge else ""
 
-        # ========== 4. ГОЛОСОВАНИЯ ==========
+        # Голосования
         if data.voteHistory:
             days = sorted([int(k) for k in data.voteHistory.keys()])
             vote_idx = 0
@@ -168,7 +167,7 @@ async def generate_protocol(data: ProtocolData):
 
                 vote_idx += 1
 
-        # ========== 5. ПОЯСНЕНИЯ ==========
+        # Пояснения
         notes = data.notes if data.notes else []
         for i, row in enumerate(range(79, 93)):
             if i < len(notes) and notes[i]:
@@ -199,7 +198,7 @@ async def generate_protocol(data: ProtocolData):
                 row = 94 + i
                 ws[f'D{row}'] = line
 
-        # ========== 6. СОХРАНЕНИЕ ==========
+        # Сохранение
         buffer = io.BytesIO()
         wb.save(buffer)
         buffer.seek(0)
