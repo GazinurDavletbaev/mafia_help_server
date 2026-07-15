@@ -60,7 +60,7 @@ class ClubUpdate(BaseModel):
 
 # ========== ЭНДПОИНТЫ ==========
 
-@router.get("", response_model=List[ClubResponse])
+@router.get("/", response_model=List[ClubResponse])
 async def get_clubs(
     token: str,
     db: Session = Depends(get_db)
