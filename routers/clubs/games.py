@@ -136,7 +136,7 @@ async def save_game(
     }
 
 
-@router.get("/{club_id}")
+@router.get("/club/{club_id}")
 async def get_club_games(
     club_id: int,
     current_user: User = Depends(get_current_user),
