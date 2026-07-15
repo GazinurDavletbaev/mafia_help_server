@@ -168,7 +168,7 @@ async def get_club_games(
     return result
 
 
-@router.get("game/{game_id}")
+@router.get("/game/{game_id}")
 async def get_game(
     game_id: int,
     current_user: User = Depends(get_current_user),
