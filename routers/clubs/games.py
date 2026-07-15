@@ -15,25 +15,41 @@ async def save_game(
 ):
     """Сохраняет завершённую игру в клуб (только президент или судья)"""
     
+    print("=" * 60)
+    print("💾 СОХРАНЕНИЕ ИГРЫ В БД")
+    print("=" * 60)
+    
     club_id = game_data.get('club_id')
+    print(f"📊 club_id: {club_id}")
+    
     if not club_id:
         raise HTTPException(status_code=400, detail="club_id обязателен")
     
     club = db.query(Club).filter(Club.id == club_id).first()
     if not club:
+        print(f"❌ Клуб {club_id} не найден")
         raise HTTPException(status_code=404, detail="Клуб не найден")
+    print(f"✅ Клуб найден: {club.title}")
     
+    # Проверяем права
     is_president = club.president_id == current_user.id
     is_judge = db.query(ClubJudge).filter(
         ClubJudge.club_id == club_id,
         ClubJudge.judge_id == current_user.id
     ).first() is not None
     
+    print(f"📊 is_president: {is_president}")
+    print(f"📊 is_judge: {is_judge}")
+    
     if not is_president and not is_judge:
+        print("❌ Нет прав на сохранение")
         raise HTTPException(
             status_code=403,
             detail="Только президент или судья клуба могут сохранять игры"
         )
+    
+    # Создаём игру
+    print("📝 Создаём запись в games...")
     
     game_date = None
     if game_data.get('date'):
@@ -65,8 +81,13 @@ async def save_game(
     )
     db.add(game)
     db.flush()
+    print(f"✅ Создана игра ID: {game.id}")
     
-    for player in game_data.get('players', []):
+    # Сохраняем игроков
+    players = game_data.get('players', [])
+    print(f"📝 Сохраняем {len(players)} игроков...")
+    
+    for player in players:
         game_player = GamePlayer(
             game_id=game.id,
             user_id=None,
@@ -80,8 +101,12 @@ async def save_game(
             is_removed=bool(player.get('rule')),
         )
         db.add(game_player)
+        print(f"  ✅ Игрок {player.get('seat')}: {player.get('name')} — {player.get('role')}")
     
+    # Сохраняем ночные действия
     night_actions = game_data.get('nightActions', [])
+    print(f"📝 Сохраняем ночные действия: {night_actions}")
+    
     for i in range(0, len(night_actions), 3):
         night = NightAction(
             game_id=game.id,
@@ -91,8 +116,12 @@ async def save_game(
             sheriff_check=night_actions[i+2] if i+2 < len(night_actions) and night_actions[i+2] > 0 else None,
         )
         db.add(night)
+        print(f"  ✅ Ночь {i // 3 + 1}: стрельба={night_actions[i] if i < len(night_actions) else 0}, дон={night_actions[i+1] if i+1 < len(night_actions) else 0}, шериф={night_actions[i+2] if i+2 < len(night_actions) else 0}")
     
+    # Сохраняем голосования
     vote_history = game_data.get('voteHistory', {})
+    print(f"📝 Сохраняем голосования: {len(vote_history)} дней")
+    
     for day_str, day_data in vote_history.items():
         try:
             day = int(day_str)
@@ -114,6 +143,7 @@ async def save_game(
             )
             db.add(vote_round)
             db.flush()
+            print(f"  ✅ День {day}, раунд {round_idx + 1}: result={result}")
             
             if isinstance(round_votes, dict):
                 for seat_str, count in round_votes.items():
@@ -127,7 +157,14 @@ async def save_game(
                     except:
                         pass
     
+    # Сохраняем в БД
+    print("💾 Коммитим в БД...")
     db.commit()
+    print("✅ БД обновлена!")
+    
+    print("=" * 60)
+    print(f"✅ Игра {game.id} успешно сохранена в клуб {club.title}")
+    print("=" * 60)
     
     return {
         "success": True,
@@ -144,10 +181,14 @@ async def get_club_games(
 ):
     """Получить все игры клуба (доступно всем авторизованным пользователям)"""
     
+    print(f"📊 Запрос игр клуба {club_id}")
+    
     games = db.query(Game).filter(Game.club_id == club_id).order_by(
         Game.game_date.desc(),
         Game.created_at.desc()
     ).all()
+    
+    print(f"📊 Найдено игр: {len(games)}")
     
     result = []
     for game in games:
@@ -179,8 +220,6 @@ async def get_game(
     game = db.query(Game).filter(Game.id == game_id).first()
     if not game:
         raise HTTPException(status_code=404, detail="Игра не найдена")
-    
-    # ✅ Убираем проверку is_member
     
     players = db.query(GamePlayer).filter(GamePlayer.game_id == game.id).all()
     players_data = [{
