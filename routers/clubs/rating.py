@@ -37,27 +37,35 @@ async def get_club_rating(
             "players": [],
         }
     
+    # ✅ Группируем по имени игрока, а не по user_id
     stats = {}
     
     for game in games:
         game_players = db.query(GamePlayer).filter(GamePlayer.game_id == game.id).all()
         for gp in game_players:
-            if gp.user_id not in stats:
-                stats[gp.user_id] = {
-                    "username": gp.player_name or "Игрок",
+            # Используем имя игрока как ключ
+            player_name = gp.player_name or f"Игрок {gp.seat_number}"
+            
+            if player_name not in stats:
+                stats[player_name] = {
+                    "username": player_name,
+                    "games_played": 0,
                     "points": 0,
-                    "bonus": 0,
+                    "bonus": 0.0,
                     "wins": 0,
                 }
             
-            stats[gp.user_id]["points"] += gp.points
-            stats[gp.user_id]["bonus"] += float(gp.bonus) if gp.bonus else 0
+            stats[player_name]["games_played"] += 1
+            stats[player_name]["points"] += gp.points
+            stats[player_name]["bonus"] += float(gp.bonus) if gp.bonus else 0
             
+            # Проверяем победу
             if game.winner == "red" and gp.role in ["citizen", "sheriff"]:
-                stats[gp.user_id]["wins"] += 1
+                stats[player_name]["wins"] += 1
             elif game.winner == "black" and gp.role in ["mafia", "don"]:
-                stats[gp.user_id]["wins"] += 1
+                stats[player_name]["wins"] += 1
     
+    # Сортируем по очкам (points + bonus)
     sorted_players = sorted(
         stats.values(),
         key=lambda x: x["points"] + x["bonus"],

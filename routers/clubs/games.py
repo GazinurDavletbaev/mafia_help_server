@@ -167,6 +167,99 @@ async def get_club_games(
     
     return result
 
+@router.post("/update/{game_id}")
+async def update_game(
+    game_id: int,
+    game_data: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Обновляет существующую игру (удаляет старую и создаёт новую с тем же ID)"""
+    
+    # Проверяем, что игра существует
+    existing_game = db.query(Game).filter(Game.id == game_id).first()
+    if not existing_game:
+        raise HTTPException(status_code=404, detail="Игра не найдена")
+    
+    # Проверяем права
+    club = db.query(Club).filter(Club.id == existing_game.club_id).first()
+    if not club:
+        raise HTTPException(status_code=404, detail="Клуб не найден")
+    
+    is_president = club.president_id == current_user.id
+    is_judge = db.query(ClubJudge).filter(
+        ClubJudge.club_id == club.id,
+        ClubJudge.judge_id == current_user.id
+    ).first() is not None
+    
+    if not is_president and not is_judge:
+        raise HTTPException(
+            status_code=403,
+            detail="Только президент или судья клуба могут обновлять игры"
+        )
+    
+    # ========== УДАЛЯЕМ СТАРУЮ ИГРУ ==========
+    # Удаляем голоса
+    vote_rounds = db.query(VoteRound).filter(VoteRound.game_id == game_id).all()
+    for vr in vote_rounds:
+        db.query(VoteItem).filter(VoteItem.vote_round_id == vr.id).delete()
+    db.query(VoteRound).filter(VoteRound.game_id == game_id).delete()
+    
+    # Удаляем ночные действия
+    db.query(NightAction).filter(NightAction.game_id == game_id).delete()
+    
+    # Удаляем игроков
+    db.query(GamePlayer).filter(GamePlayer.game_id == game_id).delete()
+    
+    # Удаляем саму игру
+    db.delete(existing_game)
+    db.commit()
+    
+    # ========== СОЗДАЁМ НОВУЮ ИГРУ С ТЕМ ЖЕ ID ==========
+    # ... (код создания игры как в POST /save)
+    # ВАЖНО: при создании указываем id = game_id
+    
+    game_date = None
+    if game_data.get('date'):
+        try:
+            game_date = datetime.strptime(game_data['date'], "%Y-%m-%d").date()
+        except:
+            pass
+    
+    game_time = None
+    if game_data.get('time'):
+        try:
+            game_time = datetime.strptime(game_data['time'], "%H:%M").time()
+        except:
+            pass
+    
+    new_game = Game(
+        id=game_id,  # ✅ ЯВНО УКАЗЫВАЕМ ID
+        club_id=club.id,
+        judge_id=current_user.id,
+        tournament=game_data.get('tournament'),
+        stage=game_data.get('stage'),
+        table_number=game_data.get('table'),
+        game_number=game_data.get('game'),
+        game_date=game_date,
+        game_time=game_time,
+        winner=game_data.get('winner'),
+        best_move=game_data.get('bestMove'),
+        protest=game_data.get('protest'),
+        protest_comment=game_data.get('protestComment'),
+    )
+    db.add(new_game)
+    db.flush()
+    
+    # ... сохраняем игроков, ночные действия, голосования (как в /save)
+    
+    db.commit()
+    
+    return {
+        "success": True,
+        "game_id": game_id,
+        "message": "Игра обновлена"
+    }
 
 @router.get("/game/{game_id}")
 async def get_game(
