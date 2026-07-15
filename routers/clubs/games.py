@@ -134,3 +134,114 @@ async def save_game(
         "game_id": game.id,
         "message": "Игра сохранена"
     }
+
+
+@router.get("/club/{club_id}")
+async def get_club_games(
+    club_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Получить все игры клуба (доступно всем авторизованным пользователям)"""
+    
+    games = db.query(Game).filter(Game.club_id == club_id).order_by(
+        Game.game_date.desc(),
+        Game.created_at.desc()
+    ).all()
+    
+    result = []
+    for game in games:
+        judge = db.query(User).filter(User.id == game.judge_id).first()
+        result.append({
+            "id": game.id,
+            "tournament": game.tournament,
+            "stage": game.stage,
+            "table_number": game.table_number,
+            "game_number": game.game_number,
+            "game_date": game.game_date.isoformat() if game.game_date else None,
+            "game_time": game.game_time.isoformat() if game.game_time else None,
+            "winner": game.winner,
+            "judge_name": judge.username if judge else None,
+            "created_at": game.created_at.isoformat() if game.created_at else None,
+        })
+    
+    return result
+
+
+@router.get("/{game_id}")
+async def get_game(
+    game_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Получить полные данные игры по ID (доступно всем авторизованным пользователям)"""
+    
+    game = db.query(Game).filter(Game.id == game_id).first()
+    if not game:
+        raise HTTPException(status_code=404, detail="Игра не найдена")
+    
+    # ✅ Убираем проверку is_member
+    
+    players = db.query(GamePlayer).filter(GamePlayer.game_id == game.id).all()
+    players_data = [{
+        "seat": p.seat_number,
+        "name": p.player_name,
+        "role": p.role,
+        "fouls": p.fouls,
+        "points": p.points,
+        "bonus": float(p.bonus) if p.bonus else 0,
+        "rule": p.removed_rule,
+    } for p in players]
+    
+    night_actions = db.query(NightAction).filter(NightAction.game_id == game.id).order_by(
+        NightAction.night_number
+    ).all()
+    night_data = [{
+        "night": n.night_number,
+        "kill": n.kill_target or 0,
+        "don": n.don_check or 0,
+        "sheriff": n.sheriff_check or 0,
+    } for n in night_actions]
+    
+    vote_rounds = db.query(VoteRound).filter(VoteRound.game_id == game.id).all()
+    vote_history = {}
+    for vr in vote_rounds:
+        day_key = str(vr.day_number)
+        if day_key not in vote_history:
+            vote_history[day_key] = {
+                "rounds": [],
+                "result": [],
+                "eliminationVotes": 0,
+            }
+        
+        items = db.query(VoteItem).filter(VoteItem.vote_round_id == vr.id).all()
+        votes = {str(item.player_seat): item.votes_count for item in items}
+        vote_history[day_key]["rounds"].append(votes)
+        
+        if vr.result:
+            try:
+                vote_history[day_key]["result"] = [int(x.strip()) for x in vr.result.split(",") if x.strip()]
+            except:
+                pass
+        vote_history[day_key]["eliminationVotes"] = vr.elimination_votes
+    
+    judge = db.query(User).filter(User.id == game.judge_id).first()
+    
+    return {
+        "id": game.id,
+        "club_id": game.club_id,
+        "tournament": game.tournament,
+        "stage": game.stage,
+        "table": game.table_number,
+        "game": game.game_number,
+        "date": game.game_date.isoformat() if game.game_date else None,
+        "time": game.game_time.isoformat() if game.game_time else None,
+        "judge": judge.username if judge else None,
+        "winner": game.winner,
+        "best_move": game.best_move,
+        "protest": game.protest,
+        "protest_comment": game.protest_comment,
+        "players": players_data,
+        "night_actions": night_data,
+        "vote_history": vote_history,
+    }
