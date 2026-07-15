@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from routers import auth, games, rating, protocol, clubs, user
+from routers import auth, rating, protocol, clubs, user
 
 app = FastAPI(title="Mafia API", version="1.0.0")
 app.mount("/uploads", StaticFiles(directory="/root/mafia_excel_api/uploads"), name="uploads")
