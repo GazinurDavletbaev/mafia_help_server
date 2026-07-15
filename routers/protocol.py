@@ -7,7 +7,6 @@ from openpyxl import load_workbook
 
 router = APIRouter()
 
-# ========== МОДЕЛИ ==========
 class PlayerData(BaseModel):
     seat: int
     name: str
@@ -15,13 +14,13 @@ class PlayerData(BaseModel):
     fouls: int
     points: int
     bonus: float
-    rule: str = ""  # ✅ ДОБАВЛЕНО
+    rule: str = ""
 
 class ProtocolData(BaseModel):
     tournament: str
     stage: str
-    table: str
-    game: str
+    table: int
+    game: int
     date: str
     time: str
     judge: str
@@ -34,7 +33,6 @@ class ProtocolData(BaseModel):
     notes: List[str] = []
     protestComment: str = ""
 
-# ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
 def get_role_short(role: str) -> str:
     roles = {'don': 'Д', 'mafia': 'Ч', 'sheriff': 'Ш', 'citizen': 'К'}
     return roles.get(role, '?')
@@ -48,7 +46,6 @@ def parse_best_move(best_move_str: str) -> List[str]:
         result.append('')
     return result
 
-# ========== ЭНДПОИНТ ==========
 @router.post("/generate")
 async def generate_protocol(data: ProtocolData):
     try:
@@ -56,29 +53,36 @@ async def generate_protocol(data: ProtocolData):
         print("📥 ПОЛУЧЕН ЗАПРОС НА ГЕНЕРАЦИЮ EXCEL")
         print("=" * 60)
         
+        # ✅ ВСЕ ПРИНТЫ
         print(f"📊 tournament: {data.tournament}")
         print(f"📊 stage: {data.stage}")
-        print(f"📊 table: {data.table}")
-        print(f"📊 game: {data.game}")
+        print(f"📊 table: {data.table} (тип: {type(data.table).__name__})")
+        print(f"📊 game: {data.game} (тип: {type(data.game).__name__})")
         print(f"📊 date: {data.date}")
         print(f"📊 time: {data.time}")
         print(f"📊 judge: {data.judge}")
+        print(f"📊 bestMove: {data.bestMove}")
+        print(f"📊 protest: {data.protest}")
         print(f"📊 winner: {data.winner}")
         print(f"📊 players: {len(data.players)}")
+        if data.players:
+            print(f"📊 первый игрок: seat={data.players[0].seat}, name={data.players[0].name}, role={data.players[0].role}, fouls={data.players[0].fouls}, points={data.players[0].points}, bonus={data.players[0].bonus}, rule={data.players[0].rule}")
+        print(f"📊 nightActions: {data.nightActions}")
+        print(f"📊 voteHistory keys: {list(data.voteHistory.keys())}")
+        print(f"📊 notes: {len(data.notes)}")
+        print(f"📊 protestComment: {data.protestComment}")
         print("-" * 60)
 
         wb = load_workbook("blank_protocol2.xlsx")
         ws = wb.active
 
-        # Шапка
         ws['O4'] = data.tournament if data.tournament else ""
         ws['BA4'] = data.stage if data.stage else ""
         ws['K7'] = data.date if data.date else ""
         ws['V7'] = data.time if data.time else "00:00 — 00:00"
-        ws['AQ7'] = data.table if data.table else ""
-        ws['BE7'] = data.game if data.game else ""
+        ws['AQ7'] = str(data.table) if data.table else ""
+        ws['BE7'] = str(data.game) if data.game else ""
 
-        # Игроки
         player_rows = [14, 18, 22, 26, 30, 34, 38, 42, 46, 50]
         for i, player in enumerate(data.players):
             if i >= 10:
@@ -90,7 +94,6 @@ async def generate_protocol(data: ProtocolData):
             ws[f'AU{row}'] = player.points
             ws[f'BB{row}'] = player.bonus
 
-        # Информация
         winner_text = "КРАСНЫЕ" if data.winner == 'red' else 'ЧЁРНЫЕ'
         ws['AG55'] = winner_text
 
@@ -102,7 +105,6 @@ async def generate_protocol(data: ProtocolData):
         best_move_player = data.nightActions[0] if data.nightActions and data.nightActions[0] > 0 else ""
         ws['BD59'] = best_move_player
 
-        # Стрельба
         shoot_actions = data.nightActions[0::3]
         shoot_cells = ['V63', 'Z63', 'AD63', 'AH63', 'AL63', 'AP63', 'AT63', 'AX63', 'BB63', 'BF63']
         for i, action in enumerate(shoot_actions):
@@ -113,7 +115,6 @@ async def generate_protocol(data: ProtocolData):
         ws['T67'] = data.protest if data.protest else ""
         ws['Q71'] = data.judge if data.judge else ""
 
-        # Голосования
         if data.voteHistory:
             days = sorted([int(k) for k in data.voteHistory.keys()])
             vote_idx = 0
@@ -167,7 +168,6 @@ async def generate_protocol(data: ProtocolData):
 
                 vote_idx += 1
 
-        # Пояснения
         notes = data.notes if data.notes else []
         for i, row in enumerate(range(79, 93)):
             if i < len(notes) and notes[i]:
@@ -175,7 +175,6 @@ async def generate_protocol(data: ProtocolData):
             else:
                 ws[f'D{row}'] = ""
 
-        # Комментарий к протесту
         protest_comment = data.protestComment if data.protestComment else ""
         if protest_comment:
             words = protest_comment.split()
@@ -198,7 +197,6 @@ async def generate_protocol(data: ProtocolData):
                 row = 94 + i
                 ws[f'D{row}'] = line
 
-        # Сохранение
         buffer = io.BytesIO()
         wb.save(buffer)
         buffer.seek(0)
