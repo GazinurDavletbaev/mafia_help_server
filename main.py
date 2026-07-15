@@ -18,10 +18,10 @@ app.add_middleware(
 
 # Роутеры
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
-app.include_router(clubs_router, prefix="/games", tags=["games"])
+app.include_router(clubs.router, prefix="/games", tags=["games"])  # ← clubs.router
 app.include_router(rating.router, prefix="/rating", tags=["rating"])
 app.include_router(protocol.router, prefix="/protocol", tags=["protocol"])
-app.include_router(clubs.router, prefix="/clubs", tags=["clubs"])
+app.include_router(clubs.router, prefix="/clubs", tags=["clubs"])  # ← clubs.router
 app.include_router(user.router, prefix="/user", tags=["user"])
 
 @app.get("/")
