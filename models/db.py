@@ -13,6 +13,7 @@ class User(Base):
     avatar_url = Column(String(255), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    club_id = Column(Integer, ForeignKey("clubs.id", ondelete="SET NULL"), nullable=True)
 
     # ✅ НОВЫЕ ПОЛЯ ДЛЯ ПРОФИЛЯ
     first_name = Column(String(100), nullable=True)   # ✅ ДОБАВИТЬ

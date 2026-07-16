@@ -18,20 +18,21 @@ async def get_club_members(
     if not club:
         raise HTTPException(status_code=404, detail="Клуб не найден")
     
-    judges = db.query(ClubJudge).filter(ClubJudge.club_id == club_id).all()
+    # ✅ Все участники клуба (у кого club_id == club_id)
+    users = db.query(User).filter(User.club_id == club_id).all()
+    
+    # ✅ Все судьи клуба
+    judge_ids = [j.judge_id for j in db.query(ClubJudge).filter(ClubJudge.club_id == club_id).all()]
     
     members = []
-    for judge in judges:
-        u = db.query(User).filter(User.id == judge.judge_id).first()
-        if not u:
-            continue
-        
+    for u in users:
         members.append({
             "id": u.id,
             "username": u.username,
             "email": u.email,
-            "is_president": judge.judge_id == club.president_id,
-            "joined_at": judge.created_at,
+            "is_president": u.id == club.president_id,
+            "is_judge": u.id in judge_ids,
+            "joined_at": u.created_at,
         })
     
     return {"members": members}

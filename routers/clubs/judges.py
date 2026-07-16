@@ -26,9 +26,11 @@ async def promote_to_judge(
     if not target_user:
         raise HTTPException(status_code=404, detail="Пользователь не найден")
     
+    # ✅ Проверяем, что пользователь состоит в клубе
     if target_user.club_id != club_id:
         raise HTTPException(status_code=400, detail="Пользователь не состоит в этом клубе")
     
+    # ✅ Проверяем, не судья ли уже
     existing = db.query(ClubJudge).filter(
         ClubJudge.club_id == club_id,
         ClubJudge.judge_id == user_id
