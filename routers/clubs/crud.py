@@ -131,6 +131,10 @@ async def create_club(
     db.commit()
     db.refresh(club)
     
+    # ✅ Проставляем club_id пользователю (президенту)
+    user.club_id = club.id
+    db.commit()
+    
     judge = ClubJudge(club_id=club.id, judge_id=user.id)
     db.add(judge)
     db.commit()

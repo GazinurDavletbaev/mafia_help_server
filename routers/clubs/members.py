@@ -37,6 +37,7 @@ async def get_club_members(
     
     return {"members": members}
 
+
 @router.delete("/{club_id}/members/{user_id}")
 async def remove_member(
     club_id: int,
@@ -56,17 +57,22 @@ async def remove_member(
     if club.president_id == user_id:
         raise HTTPException(status_code=400, detail="Нельзя удалить президента клуба")
     
+    # ✅ Очищаем club_id у пользователя
+    target_user = db.query(User).filter(User.id == user_id).first()
+    if target_user:
+        target_user.club_id = None
+        db.commit()
+    
     judge = db.query(ClubJudge).filter(
         ClubJudge.club_id == club_id,
         ClubJudge.judge_id == user_id
     ).first()
-    if not judge:
-        raise HTTPException(status_code=404, detail="Пользователь не состоит в клубе")
-    
-    db.delete(judge)
-    db.commit()
+    if judge:
+        db.delete(judge)
+        db.commit()
     
     return {"message": "Участник удалён из клуба"}
+
 
 @router.delete("/{club_id}/leave")
 async def leave_club(
@@ -111,6 +117,10 @@ async def leave_club(
         
         return {"message": "Клуб удалён. Все данные стёрты."}
     else:
+        # ✅ Очищаем club_id у пользователя
+        user.club_id = None
+        db.commit()
+        
         db.query(ClubJudge).filter(
             ClubJudge.club_id == club_id,
             ClubJudge.judge_id == user.id
