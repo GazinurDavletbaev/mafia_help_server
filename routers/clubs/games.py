@@ -167,6 +167,7 @@ async def get_club_games(
     
     return result
 
+
 @router.post("/update/{game_id}")
 async def update_game(
     game_id: int,
@@ -176,12 +177,10 @@ async def update_game(
 ):
     """Обновляет существующую игру (удаляет старую и создаёт новую с тем же ID)"""
     
-    # Проверяем, что игра существует
     existing_game = db.query(Game).filter(Game.id == game_id).first()
     if not existing_game:
         raise HTTPException(status_code=404, detail="Игра не найдена")
     
-    # Проверяем права
     club = db.query(Club).filter(Club.id == existing_game.club_id).first()
     if not club:
         raise HTTPException(status_code=404, detail="Клуб не найден")
@@ -198,26 +197,14 @@ async def update_game(
             detail="Только президент или судья клуба могут обновлять игры"
         )
     
-    # ========== УДАЛЯЕМ СТАРУЮ ИГРУ ==========
-    # Удаляем голоса
     vote_rounds = db.query(VoteRound).filter(VoteRound.game_id == game_id).all()
     for vr in vote_rounds:
         db.query(VoteItem).filter(VoteItem.vote_round_id == vr.id).delete()
     db.query(VoteRound).filter(VoteRound.game_id == game_id).delete()
-    
-    # Удаляем ночные действия
     db.query(NightAction).filter(NightAction.game_id == game_id).delete()
-    
-    # Удаляем игроков
     db.query(GamePlayer).filter(GamePlayer.game_id == game_id).delete()
-    
-    # Удаляем саму игру
     db.delete(existing_game)
     db.commit()
-    
-    # ========== СОЗДАЁМ НОВУЮ ИГРУ С ТЕМ ЖЕ ID ==========
-    # ... (код создания игры как в POST /save)
-    # ВАЖНО: при создании указываем id = game_id
     
     game_date = None
     if game_data.get('date'):
@@ -234,7 +221,7 @@ async def update_game(
             pass
     
     new_game = Game(
-        id=game_id,  # ✅ ЯВНО УКАЗЫВАЕМ ID
+        id=game_id,
         club_id=club.id,
         judge_id=current_user.id,
         tournament=game_data.get('tournament'),
@@ -251,7 +238,66 @@ async def update_game(
     db.add(new_game)
     db.flush()
     
-    # ... сохраняем игроков, ночные действия, голосования (как в /save)
+    for player in game_data.get('players', []):
+        game_player = GamePlayer(
+            game_id=new_game.id,
+            user_id=None,
+            seat_number=player.get('seat', 0),
+            player_name=player.get('name', ''),
+            role=player.get('role', ''),
+            fouls=player.get('fouls', 0),
+            points=player.get('points', 0),
+            bonus=player.get('bonus', 0),
+            removed_rule=player.get('rule'),
+            is_removed=bool(player.get('rule')),
+        )
+        db.add(game_player)
+    
+    night_actions = game_data.get('nightActions', [])
+    for i in range(0, len(night_actions), 3):
+        night = NightAction(
+            game_id=new_game.id,
+            night_number=i // 3 + 1,
+            kill_target=night_actions[i] if i < len(night_actions) and night_actions[i] > 0 else None,
+            don_check=night_actions[i+1] if i+1 < len(night_actions) and night_actions[i+1] > 0 else None,
+            sheriff_check=night_actions[i+2] if i+2 < len(night_actions) and night_actions[i+2] > 0 else None,
+        )
+        db.add(night)
+    
+    vote_history = game_data.get('voteHistory', {})
+    for day_str, day_data in vote_history.items():
+        try:
+            day = int(day_str)
+        except:
+            continue
+        
+        rounds = day_data.get('rounds', [])
+        result = day_data.get('result', [])
+        elimination_votes = day_data.get('eliminationVotes', 0)
+        
+        for round_idx, round_votes in enumerate(rounds):
+            vote_round = VoteRound(
+                game_id=new_game.id,
+                day_number=day,
+                round_number=round_idx + 1,
+                is_elimination=False,
+                elimination_votes=elimination_votes if round_idx == len(rounds) - 1 else 0,
+                result=", ".join(map(str, result)) if result else "",
+            )
+            db.add(vote_round)
+            db.flush()
+            
+            if isinstance(round_votes, dict):
+                for seat_str, count in round_votes.items():
+                    try:
+                        vote_item = VoteItem(
+                            vote_round_id=vote_round.id,
+                            player_seat=int(seat_str),
+                            votes_count=count,
+                        )
+                        db.add(vote_item)
+                    except:
+                        pass
     
     db.commit()
     
@@ -261,6 +307,7 @@ async def update_game(
         "message": "Игра обновлена"
     }
 
+
 @router.get("/game/{game_id}")
 async def get_game(
     game_id: int,
@@ -269,7 +316,6 @@ async def get_game(
 ):
     """Получить полные данные игры по ID (доступно всем авторизованным)"""
     
-    # ✅ Ищем ИГРУ, а не клуб
     game = db.query(Game).filter(Game.id == game_id).first()
     if not game:
         raise HTTPException(status_code=404, detail="Игра не найдена")
