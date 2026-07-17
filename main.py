@@ -3,7 +3,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from routers import auth, rating, protocol, clubs, user
-from routers.clubs.games import router as games_router  # ✅ ДОБАВИТЬ
 
 app = FastAPI(title="Mafia API", version="1.0.0")
 app.mount("/uploads", StaticFiles(directory="/root/mafia_excel_api/uploads"), name="uploads")
@@ -19,10 +18,10 @@ app.add_middleware(
 
 # Роутеры
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
-app.include_router(games_router, prefix="/games", tags=["games"])  # ✅ ИГРЫ
+app.include_router(clubs.router, prefix="/games", tags=["games"])  # ← clubs.router
 app.include_router(rating.router, prefix="/rating", tags=["rating"])
 app.include_router(protocol.router, prefix="/protocol", tags=["protocol"])
-app.include_router(clubs.router, prefix="/clubs", tags=["clubs"])
+app.include_router(clubs.router, prefix="/clubs", tags=["clubs"])  # ← clubs.router
 app.include_router(user.router, prefix="/user", tags=["user"])
 
 @app.get("/")
