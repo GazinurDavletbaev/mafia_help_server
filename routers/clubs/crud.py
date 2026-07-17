@@ -60,7 +60,7 @@ class ClubUpdate(BaseModel):
 
 # ========== ЭНДПОИНТЫ ==========
 
-@router.get("/", response_model=List[ClubResponse])
+@router.get("", response_model=List[ClubResponse])
 async def get_clubs(
     token: str,
     db: Session = Depends(get_db)
@@ -102,7 +102,7 @@ async def get_clubs(
     result.sort(key=lambda x: (not x["is_official"], x["title"]))
     return result
 
-@router.post("/", response_model=ClubDetailResponse)
+@router.post("", response_model=ClubDetailResponse)
 async def create_club(
     club_data: ClubCreate,
     token: str,
