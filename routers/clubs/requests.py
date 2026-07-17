@@ -95,22 +95,16 @@ async def approve_request(
     if club.president_id != user.id:
         raise HTTPException(status_code=403, detail="Только президент может принимать заявки")
     
-    # ✅ Добавляем пользователя в клуб (проставляем club_id)
+    # ✅ Проставляем club_id пользователю (он становится участником)
     target_user = db.query(User).filter(User.id == request.user_id).first()
     if target_user:
         target_user.club_id = club.id
         db.commit()
     
-    # Добавляем в судьи
-    judge = ClubJudge(
-        club_id=club.id,
-        judge_id=request.user_id
-    )
-    db.add(judge)
     request.status = "approved"
     db.commit()
     
-    return {"message": "Заявка принята"}
+    return {"message": "Заявка принята. Пользователь добавлен в клуб."}
 
 @router.post("/requests/{request_id}/reject")
 async def reject_request(
