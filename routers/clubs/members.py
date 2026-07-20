@@ -30,6 +30,7 @@ async def get_club_members(
             "id": u.id,
             "username": u.username,
             "email": u.email,
+            "avatar_url": u.avatar_url,  # ✅ ДОБАВИТЬ
             "is_president": u.id == club.president_id,
             "is_judge": u.id in judge_ids,
             "joined_at": u.created_at,
