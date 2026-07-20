@@ -172,6 +172,11 @@ async def get_my_club(
         return {"club": None}
     
     president = db.query(User).filter(User.id == club.president_id).first()
+    
+    # ✅ Количество участников (у кого club_id == club.id)
+    members_count = db.query(User).filter(User.club_id == club.id).count()
+    
+    # ✅ Количество судей
     judges_count = db.query(ClubJudge).filter(ClubJudge.club_id == club.id).count()
     
     return {
@@ -184,6 +189,7 @@ async def get_my_club(
         "logo_url": club.logo_url,
         "president_id": club.president_id,
         "president_name": president.username if president else None,
+        "members_count": members_count,  # ✅ ДОБАВИТЬ
         "judges_count": judges_count,
         "is_official": club.is_official,
         "created_at": club.created_at,
