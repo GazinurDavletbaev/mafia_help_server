@@ -24,7 +24,8 @@ async def get_club_rating(
     games = db.query(Game).filter(
         Game.club_id == club_id,
         extract('year', Game.game_date) == year,
-        extract('month', Game.game_date) == month
+        extract('month', Game.game_date) == month,
+        Game.counts_in_rating == True  # ✅ ТОЛЬКО ТЕ, КТО В РЕЙТИНГЕ
     ).all()
     
     if not games:
@@ -37,13 +38,11 @@ async def get_club_rating(
             "players": [],
         }
     
-    # ✅ Группируем по имени игрока, а не по user_id
     stats = {}
     
     for game in games:
         game_players = db.query(GamePlayer).filter(GamePlayer.game_id == game.id).all()
         for gp in game_players:
-            # Используем имя игрока как ключ
             player_name = gp.player_name or f"Игрок {gp.seat_number}"
             
             if player_name not in stats:
@@ -59,18 +58,21 @@ async def get_club_rating(
             stats[player_name]["points"] += gp.points
             stats[player_name]["bonus"] += float(gp.bonus) if gp.bonus else 0
             
-            # Проверяем победу
             if game.winner == "red" and gp.role in ["citizen", "sheriff"]:
                 stats[player_name]["wins"] += 1
             elif game.winner == "black" and gp.role in ["mafia", "don"]:
                 stats[player_name]["wins"] += 1
     
-    # Сортируем по очкам (points + bonus)
     sorted_players = sorted(
         stats.values(),
         key=lambda x: x["points"] + x["bonus"],
         reverse=True
     )
+    
+    # ✅ Округляем бонусы и считаем total
+    for player in sorted_players:
+        player["bonus"] = round(player["bonus"], 1)
+        player["total"] = round(player["points"] + player["bonus"], 1)
     
     return {
         "month": month,

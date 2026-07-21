@@ -92,6 +92,7 @@ class ClubRequest(Base):
 class Game(Base):
     __tablename__ = "games"
 
+    counts_in_rating = Column(Boolean, default=True)
     id = Column(Integer, primary_key=True, index=True)
     club_id = Column(Integer, ForeignKey("clubs.id", ondelete="CASCADE"), nullable=False)
     judge_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)

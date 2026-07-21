@@ -163,6 +163,7 @@ async def get_club_games(
             "winner": game.winner,
             "judge_name": judge.username if judge else None,
             "created_at": game.created_at.isoformat() if game.created_at else None,
+            "counts_in_rating": game.counts_in_rating,  # ✅ ДОБАВИТЬ
         })
     
     return result
@@ -379,7 +380,48 @@ async def get_game(
         "best_move": game.best_move,
         "protest": game.protest,
         "protest_comment": game.protest_comment,
+        "counts_in_rating": game.counts_in_rating,  # ✅ ДОБАВИТЬ
         "players": players_data,
         "night_actions": night_data,
         "vote_history": vote_history,
+    }
+
+@router.post("/{game_id}/toggle-rating")
+async def toggle_game_rating(
+    game_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Переключает флаг counts_in_rating для игры"""
+    
+    game = db.query(Game).filter(Game.id == game_id).first()
+    if not game:
+        raise HTTPException(status_code=404, detail="Игра не найдена")
+    
+    # Проверяем права (только президент или судья клуба)
+    club = db.query(Club).filter(Club.id == game.club_id).first()
+    if not club:
+        raise HTTPException(status_code=404, detail="Клуб не найден")
+    
+    is_president = club.president_id == current_user.id
+    is_judge = db.query(ClubJudge).filter(
+        ClubJudge.club_id == club.id,
+        ClubJudge.judge_id == current_user.id
+    ).first() is not None
+    
+    if not is_president and not is_judge:
+        raise HTTPException(
+            status_code=403,
+            detail="Только президент или судья клуба могут изменять настройки игры"
+        )
+    
+    # Переключаем флаг
+    game.counts_in_rating = not game.counts_in_rating
+    db.commit()
+    db.refresh(game)
+    
+    return {
+        "success": True,
+        "game_id": game.id,
+        "counts_in_rating": game.counts_in_rating
     }

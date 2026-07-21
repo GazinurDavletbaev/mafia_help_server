@@ -95,11 +95,15 @@ async def approve_request(
     if club.president_id != user.id:
         raise HTTPException(status_code=403, detail="Только президент может принимать заявки")
     
-    # ✅ Проставляем club_id пользователю (он становится участником)
+    # ✅ Просто проставляем club_id — пользователь становится членом клуба
     target_user = db.query(User).filter(User.id == request.user_id).first()
     if target_user:
         target_user.club_id = club.id
         db.commit()
+    
+    # ❌ НЕ ДОБАВЛЯЕМ В СУДЬИ
+    # judge = ClubJudge(club_id=club.id, judge_id=request.user_id)
+    # db.add(judge)
     
     request.status = "approved"
     db.commit()

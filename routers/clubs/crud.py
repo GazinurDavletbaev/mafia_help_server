@@ -161,23 +161,27 @@ async def get_my_club(
 ):
     user = get_current_user(token, db)
     
+    club = None
+    
+    # 1. Если пользователь президент
     club = db.query(Club).filter(Club.president_id == user.id).first()
     
+    # 2. Если не президент, проверяем club_judges
     if not club:
         judge = db.query(ClubJudge).filter(ClubJudge.judge_id == user.id).first()
         if judge:
             club = db.query(Club).filter(Club.id == judge.club_id).first()
     
+    # 3. ✅ Если всё ещё нет — проверяем club_id в users
+    if not club and user.club_id:
+        club = db.query(Club).filter(Club.id == user.club_id).first()
+    
     if not club:
         return {"club": None}
     
     president = db.query(User).filter(User.id == club.president_id).first()
-    
-    # ✅ Количество участников (у кого club_id == club.id)
-    members_count = db.query(User).filter(User.club_id == club.id).count()
-    
-    # ✅ Количество судей
     judges_count = db.query(ClubJudge).filter(ClubJudge.club_id == club.id).count()
+    members_count = db.query(User).filter(User.club_id == club.id).count()
     
     return {
         "id": club.id,
@@ -189,8 +193,8 @@ async def get_my_club(
         "logo_url": club.logo_url,
         "president_id": club.president_id,
         "president_name": president.username if president else None,
-        "members_count": members_count,  # ✅ ДОБАВИТЬ
         "judges_count": judges_count,
+        "members_count": members_count,
         "is_official": club.is_official,
         "created_at": club.created_at,
     }
