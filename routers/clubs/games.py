@@ -23,18 +23,6 @@ async def save_game(
     if not club:
         raise HTTPException(status_code=404, detail="Клуб не найден")
     
-    is_president = club.president_id == current_user.id
-    is_judge = db.query(ClubJudge).filter(
-        ClubJudge.club_id == club_id,
-        ClubJudge.judge_id == current_user.id
-    ).first() is not None
-    
-    if not is_president and not is_judge:
-        raise HTTPException(
-            status_code=403,
-            detail="Только президент или судья клуба могут сохранять игры"
-        )
-    
     game_date = None
     if game_data.get('date'):
         try:
@@ -185,18 +173,6 @@ async def update_game(
     club = db.query(Club).filter(Club.id == existing_game.club_id).first()
     if not club:
         raise HTTPException(status_code=404, detail="Клуб не найден")
-    
-    is_president = club.president_id == current_user.id
-    is_judge = db.query(ClubJudge).filter(
-        ClubJudge.club_id == club.id,
-        ClubJudge.judge_id == current_user.id
-    ).first() is not None
-    
-    if not is_president and not is_judge:
-        raise HTTPException(
-            status_code=403,
-            detail="Только президент или судья клуба могут обновлять игры"
-        )
     
     vote_rounds = db.query(VoteRound).filter(VoteRound.game_id == game_id).all()
     for vr in vote_rounds:
