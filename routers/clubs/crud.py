@@ -193,10 +193,13 @@ async def get_my_club(
         "logo_url": club.logo_url,
         "president_id": club.president_id,
         "president_name": president.username if president else None,
+        "president_avatar": president.avatar_url if president else None,
         "judges_count": judges_count,
         "members_count": members_count,
         "is_official": club.is_official,
         "created_at": club.created_at,
+        "is_member": True,  # для своего клуба всегда true
+        "has_pending_request": False,  # для своего клуба всегда false
     }
 
 @router.get("/{club_id}", response_model=ClubDetailResponse)
@@ -205,7 +208,7 @@ async def get_club(
     token: str,
     db: Session = Depends(get_db)
 ):
-    get_current_user(token, db)
+    current_user = get_current_user(token, db)
     
     club = db.query(Club).filter(Club.id == club_id).first()
     if not club:
@@ -213,6 +216,15 @@ async def get_club(
     
     president = db.query(User).filter(User.id == club.president_id).first()
     judges_count = db.query(ClubJudge).filter(ClubJudge.club_id == club.id).count()
+    members_count = db.query(User).filter(User.club_id == club.id).count()
+
+    # ✅ ПРОВЕРКИ
+    is_member = current_user.club_id == club.id
+    has_pending_request = db.query(ClubRequest).filter(
+        ClubRequest.club_id == club.id,
+        ClubRequest.user_id == current_user.id,
+        ClubRequest.status == "pending"
+    ).first() is not None
     
     return {
         "id": club.id,
@@ -224,6 +236,8 @@ async def get_club(
         "judges_count": judges_count,
         "is_official": club.is_official,
         "created_at": club.created_at,
+        "is_member": is_member,
+        "has_pending_request": has_pending_request,
     }
 
 @router.put("/{club_id}")

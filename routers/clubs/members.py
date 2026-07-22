@@ -89,15 +89,19 @@ async def leave_club(
     
     is_president = club.president_id == user.id
     
-    is_member = db.query(ClubJudge).filter(
+    # ✅ Проверяем membership: либо в club_judges, либо club_id в users
+    is_judge = db.query(ClubJudge).filter(
         ClubJudge.club_id == club_id,
         ClubJudge.judge_id == user.id
-    ).first()
+    ).first() is not None
+    
+    is_member = is_judge or (user.club_id == club_id)
     
     if not is_member:
         raise HTTPException(status_code=403, detail="Вы не состоите в этом клубе")
     
     if is_president:
+        # ... удаление клуба
         games = db.query(Game).filter(Game.club_id == club_id).all()
         game_ids = [game.id for game in games]
         
@@ -122,10 +126,12 @@ async def leave_club(
         user.club_id = None
         db.commit()
         
-        db.query(ClubJudge).filter(
-            ClubJudge.club_id == club_id,
-            ClubJudge.judge_id == user.id
-        ).delete()
-        db.commit()
+        # ✅ Удаляем из club_judges (если был)
+        if is_judge:
+            db.query(ClubJudge).filter(
+                ClubJudge.club_id == club_id,
+                ClubJudge.judge_id == user.id
+            ).delete()
+            db.commit()
         
         return {"message": "Вы покинули клуб"}
