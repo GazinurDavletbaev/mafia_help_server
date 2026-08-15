@@ -142,3 +142,8 @@ async def get_profile(
         "is_email_verified": user.is_email_verified,
         "created_at": user.created_at,
     }
+
+@router.get("/count")
+async def get_user_count(db: Session = Depends(get_db)):
+    count = db.query(User).count()
+    return {"count": count}

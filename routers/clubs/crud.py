@@ -202,7 +202,7 @@ async def get_my_club(
         "has_pending_request": False,  # для своего клуба всегда false
     }
 
-@router.get("/{club_id}", response_model=ClubDetailResponse)
+@router.get("/{club_id}")
 async def get_club(
     club_id: int,
     token: str,
@@ -214,11 +214,14 @@ async def get_club(
     if not club:
         raise HTTPException(status_code=404, detail="Клуб не найден")
     
+    # 🔥 Загружаем президента
     president = db.query(User).filter(User.id == club.president_id).first()
+    
+    # 🔥 Считаем количество
     judges_count = db.query(ClubJudge).filter(ClubJudge.club_id == club.id).count()
     members_count = db.query(User).filter(User.club_id == club.id).count()
-
-    # ✅ ПРОВЕРКИ
+    
+    # 🔥 Проверки для текущего пользователя
     is_member = current_user.club_id == club.id
     has_pending_request = db.query(ClubRequest).filter(
         ClubRequest.club_id == club.id,
@@ -230,14 +233,19 @@ async def get_club(
         "id": club.id,
         "title": club.title,
         "city": club.city,
+        "description": club.description,
+        "country": club.country,
+        "region": club.region,
+        "logo_url": club.logo_url,
         "president_id": club.president_id,
         "president_name": president.username if president else None,
-        "logo_url": club.logo_url,
+        "president_avatar": president.avatar_url if president else None,  # 👈 ДОБАВИТЬ
         "judges_count": judges_count,
+        "members_count": members_count,  # 👈 ДОБАВИТЬ
         "is_official": club.is_official,
         "created_at": club.created_at,
-        "is_member": is_member,
-        "has_pending_request": has_pending_request,
+        "is_member": is_member,  # 👈 ДОБАВИТЬ
+        "has_pending_request": has_pending_request,  # 👈 ДОБАВИТЬ
     }
 
 @router.put("/{club_id}")

@@ -23,6 +23,43 @@ async def save_game(
     if not club:
         raise HTTPException(status_code=404, detail="Клуб не найден")
     
+    is_president = club.president_id == current_user.id
+    is_judge = db.query(ClubJudge).filter(
+        ClubJudge.club_id == club_id,
+        ClubJudge.judge_id == current_user.id
+    ).first() is not None
+    
+    if not is_president and not is_judge:
+        raise HTTPException(
+            status_code=403, 
+            detail="Только президент или судья могут сохранять игры"
+        )
+
+    # 🔥 ПРОВЕРКА НА ДУБЛИКАТ ПО ДАТЕ + СТОЛ + ИГРА
+    table_number = game_data.get('table')
+    game_number = game_data.get('game')
+    game_date_str = game_data.get('date')
+    
+    if table_number is not None and game_number is not None and game_date_str:
+        try:
+            game_date = datetime.strptime(game_date_str, "%Y-%m-%d").date()
+        except:
+            game_date = None
+        
+        if game_date:
+            existing = db.query(Game).filter(
+                Game.club_id == club_id,
+                Game.table_number == table_number,
+                Game.game_number == game_number,
+                Game.game_date == game_date
+            ).first()
+            
+            if existing:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Игра с такими параметрами уже существует: стол {table_number}, игра {game_number}, дата {game_date_str}"
+                )
+
     game_date = None
     if game_data.get('date'):
         try:
@@ -122,7 +159,6 @@ async def save_game(
         "game_id": game.id,
         "message": "Игра сохранена"
     }
-
 
 @router.get("/club/{club_id}")
 async def get_club_games(
