@@ -25,7 +25,7 @@ async def get_club_rating(
         Game.club_id == club_id,
         extract('year', Game.game_date) == year,
         extract('month', Game.game_date) == month,
-        Game.counts_in_rating == True  # ✅ ТОЛЬКО ТЕ, КТО В РЕЙТИНГЕ
+        Game.counts_in_rating == True
     ).all()
     
     if not games:
@@ -45,9 +45,15 @@ async def get_club_rating(
         for gp in game_players:
             player_name = gp.player_name or f"Игрок {gp.seat_number}"
             
+            # 🔥 ИЩЕМ ПОЛЬЗОВАТЕЛЯ ПО ИМЕНИ (для аватарки)
+            user_data = None
+            if gp.user_id:
+                user_data = db.query(User).filter(User.id == gp.user_id).first()
+            
             if player_name not in stats:
                 stats[player_name] = {
                     "username": player_name,
+                    "avatar_url": user_data.avatar_url if user_data else None,  # ✅ ДОБАВЛЕНО
                     "games_played": 0,
                     "points": 0,
                     "bonus": 0.0,
@@ -69,7 +75,6 @@ async def get_club_rating(
         reverse=True
     )
     
-    # ✅ Округляем бонусы и считаем total
     for player in sorted_players:
         player["bonus"] = round(player["bonus"], 1)
         player["total"] = round(player["points"] + player["bonus"], 1)
