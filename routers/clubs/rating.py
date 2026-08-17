@@ -45,15 +45,16 @@ async def get_club_rating(
         for gp in game_players:
             player_name = gp.player_name or f"Игрок {gp.seat_number}"
             
-            # 🔥 ИЩЕМ ПОЛЬЗОВАТЕЛЯ ПО ИМЕНИ (для аватарки)
-            user_data = None
-            if gp.user_id:
-                user_data = db.query(User).filter(User.id == gp.user_id).first()
+            # 🔥 ИЩЕМ ПОЛЬЗОВАТЕЛЯ ПО ИМЕНИ В КЛУБЕ
+            user_data = db.query(User).filter(
+                User.club_id == club_id,
+                User.username == player_name
+            ).first()
             
             if player_name not in stats:
                 stats[player_name] = {
                     "username": player_name,
-                    "avatar_url": user_data.avatar_url if user_data else None,  # ✅ ДОБАВЛЕНО
+                    "avatar_url": user_data.avatar_url if user_data else None,
                     "games_played": 0,
                     "points": 0,
                     "bonus": 0.0,

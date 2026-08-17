@@ -15,9 +15,9 @@ def send_verification_email(email: str, token: str):
     print(f"📧 Кому: {email}")
     print(f"📧 Токен: {token}")
 
-    # ✅ ИСПРАВЛЕНО — ссылка на приложение
-    link = f"mafiahelp://verify-email?token={token}"
-    print(f"🔗 Ссылка: {link}")
+    # 🔥 ДВЕ ССЫЛКИ
+    deep_link = f"mafiahelp://verify-email?token={token}"
+    web_link = f"https://161.104.46.234/verify-email?token={token}"
 
     msg = MIMEMultipart()
     msg['From'] = SMTP_USER
@@ -28,9 +28,31 @@ def send_verification_email(email: str, token: str):
     <html>
     <body style="font-family: Arial, sans-serif; max-width: 500px;">
         <h2 style="color: #f58b20;">Подтверждение email</h2>
-        <p>Чтобы подтвердить свой email, нажмите на кнопку ниже:</p>
-        <a href="{link}" style="display: inline-block; background: #f58b20; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold;">Подтвердить email</a>
-        <p style="color: #666; font-size: 12px; margin-top: 20px;">Ссылка действует 24 часа.</p>
+        <p>Чтобы подтвердить свой email, выберите удобный способ:</p>
+
+        <!-- 🔥 ВАРИАНТ 1: КНОПКА (для телефона с приложением) -->
+        <a href="{deep_link}" 
+           style="display: inline-block; background: #f58b20; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; margin-bottom: 12px;">
+           📱 Подтвердить в приложении
+        </a>
+
+        <p style="color: #999; font-size: 13px; margin: 8px 0;">
+           <em>или</em>
+        </p>
+
+        <!-- 🔥 ВАРИАНТ 2: ССЫЛКА (для компьютера / браузера) -->
+        <p style="font-size: 14px;">
+           <a href="{web_link}" style="color: #f58b20; word-break: break-all;">
+              {web_link}
+           </a>
+        </p>
+
+        <p style="color: #666; font-size: 12px; margin-top: 20px;">
+           Ссылка действительна 24 часа.
+        </p>
+        <p style="color: #999; font-size: 11px;">
+           Если вы не регистрировались в Mafia Help, просто проигнорируйте это письмо.
+        </p>
     </body>
     </html>
     """
@@ -38,39 +60,14 @@ def send_verification_email(email: str, token: str):
     msg.attach(MIMEText(body, 'html'))
 
     try:
-        print("📧 Подключаюсь к SMTP серверу...")
         server = smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT)
-        print("✅ Подключено")
-        
-        print("📧 Логинюсь...")
         server.login(SMTP_USER, SMTP_PASSWORD)
-        print("✅ Логин успешен")
-        
-        print("📧 Отправляю письмо...")
         server.send_message(msg)
-        print("✅ Письмо отправлено")
-        
         server.quit()
-        print("📧 Соединение закрыто")
-        print("=" * 60)
+        print("✅ Письмо отправлено")
         return True
-        
-    except smtplib.SMTPAuthenticationError as e:
-        print(f"❌ ОШИБКА АВТОРИЗАЦИИ: {e}")
-        print("   Проверь SMTP_USER и SMTP_PASSWORD")
-        print("=" * 60)
-        return False
-        
-    except smtplib.SMTPException as e:
-        print(f"❌ ОШИБКА SMTP: {e}")
-        print("=" * 60)
-        return False
-        
     except Exception as e:
-        print(f"❌ НЕИЗВЕСТНАЯ ОШИБКА: {e}")
-        import traceback
-        traceback.print_exc()
-        print("=" * 60)
+        print(f"❌ ОШИБКА: {e}")
         return False
 
 def send_reset_code_email(email: str, code: str):
