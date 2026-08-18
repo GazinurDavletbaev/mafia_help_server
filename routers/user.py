@@ -5,8 +5,10 @@ from pydantic import BaseModel
 from models.db import User
 from core.database import get_db
 from core.security import decode_token
+from PIL import Image
 import shutil
 import os
+import io
 
 router = APIRouter()
 
@@ -15,27 +17,10 @@ UPLOAD_DIR = "/root/mafia_excel_api/uploads/avatars"
 # Создаём папку, если её нет
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-@router.post("/upload-avatar")
-async def upload_avatar(
-    token: str,
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db)
-):
-    user = get_current_user(token, db)
-    
-    # Сохраняем файл
-    filename = f"{user.id}_{file.filename}"
-    file_path = os.path.join(UPLOAD_DIR, filename)
-    
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-    
-    # Сохраняем URL в БД
-    avatar_url = f"http://161.104.46.234:8001/uploads/avatars/{filename}"
-    user.avatar_url = avatar_url
-    db.commit()
-    
-    return {"avatar_url": avatar_url}
+# 🔥 МАКСИМАЛЬНЫЙ РАЗМЕР АВАТАРКИ (в пикселях)
+MAX_AVATAR_SIZE = 200
+# 🔥 КАЧЕСТВО JPEG (1-100, 85 — хороший баланс)
+JPEG_QUALITY = 85
 
 # ============================================================
 # СХЕМЫ
@@ -48,7 +33,7 @@ class UserUpdate(BaseModel):
     country: Optional[str] = None
     city: Optional[str] = None
     region: Optional[str] = None
-    avatar_url: Optional[str] = None  # ✅ ДОБАВИТЬ
+    avatar_url: Optional[str] = None
 
 # ============================================================
 # ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
@@ -67,6 +52,52 @@ def get_current_user(token: str, db: Session):
 # ============================================================
 # ЭНДПОИНТЫ
 # ============================================================
+
+# ---------- ЗАГРУЗКА АВАТАРКИ (С СЖАТИЕМ) ----------
+@router.post("/upload-avatar")
+async def upload_avatar(
+    token: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    user = get_current_user(token, db)
+    
+    # 🔥 ЧИТАЕМ ФАЙЛ В ПАМЯТЬ
+    contents = await file.read()
+    
+    # 🔥 ОТКРЫВАЕМ ИЗОБРАЖЕНИЕ
+    try:
+        img = Image.open(io.BytesIO(contents))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Неверный формат изображения: {e}")
+    
+    # 🔥 КОНВЕРТИРУЕМ В RGB (если PNG с альфа-каналом)
+    if img.mode in ('RGBA', 'LA', 'P'):
+        img = img.convert('RGB')
+    
+    # 🔥 РЕСАЙЗ (сохраняем пропорции)
+    img.thumbnail((MAX_AVATAR_SIZE, MAX_AVATAR_SIZE), Image.Resampling.LANCZOS)
+    
+    # 🔥 СОХРАНЯЕМ В JPEG (сжатие)
+    output = io.BytesIO()
+    img.save(output, format='JPEG', quality=JPEG_QUALITY, optimize=True)
+    output.seek(0)
+    
+    # 🔥 СОХРАНЯЕМ НА ДИСК
+    # Убираем расширение, добавляем .jpg
+    base_name = os.path.splitext(file.filename)[0]
+    final_filename = f"{user.id}_{base_name}.jpg"
+    file_path = os.path.join(UPLOAD_DIR, final_filename)
+    
+    with open(file_path, "wb") as buffer:
+        buffer.write(output.read())
+    
+    # Сохраняем URL в БД
+    avatar_url = f"http://161.104.46.234:8001/uploads/avatars/{final_filename}"
+    user.avatar_url = avatar_url
+    db.commit()
+    
+    return {"avatar_url": avatar_url}
 
 # ---------- ОБНОВИТЬ ПРОФИЛЬ ----------
 @router.put("/profile")
@@ -97,7 +128,7 @@ async def update_profile(
         user.city = data.city
     if data.region is not None:
         user.region = data.region
-    if data.avatar_url is not None:  # ✅ ДОБАВИТЬ
+    if data.avatar_url is not None:
         user.avatar_url = data.avatar_url
     
     db.commit()
@@ -143,6 +174,7 @@ async def get_profile(
         "created_at": user.created_at,
     }
 
+# ---------- КОЛИЧЕСТВО ПОЛЬЗОВАТЕЛЕЙ ----------
 @router.get("/count")
 async def get_user_count(db: Session = Depends(get_db)):
     count = db.query(User).count()

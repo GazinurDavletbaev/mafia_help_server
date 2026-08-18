@@ -3,8 +3,10 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime
+from PIL import Image
 import os
 import shutil
+import io
 
 from models.db import User, Club, ClubJudge, ClubRequest
 from core.database import get_db
@@ -14,6 +16,10 @@ router = APIRouter()
 
 UPLOAD_DIR = "/root/mafia_excel_api/uploads/avatars"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+# 🔥 МАКСИМАЛЬНЫЙ РАЗМЕР ЛОГОТИПА КЛУБА
+MAX_CLUB_LOGO_SIZE = 300
+JPEG_QUALITY = 85
 
 # ========== СХЕМЫ ==========
 class ClubCreate(BaseModel):
@@ -131,7 +137,6 @@ async def create_club(
     db.commit()
     db.refresh(club)
     
-    # ✅ Проставляем club_id пользователю (президенту)
     user.club_id = club.id
     db.commit()
     
@@ -163,16 +168,13 @@ async def get_my_club(
     
     club = None
     
-    # 1. Если пользователь президент
     club = db.query(Club).filter(Club.president_id == user.id).first()
     
-    # 2. Если не президент, проверяем club_judges
     if not club:
         judge = db.query(ClubJudge).filter(ClubJudge.judge_id == user.id).first()
         if judge:
             club = db.query(Club).filter(Club.id == judge.club_id).first()
     
-    # 3. ✅ Если всё ещё нет — проверяем club_id в users
     if not club and user.club_id:
         club = db.query(Club).filter(Club.id == user.club_id).first()
     
@@ -198,8 +200,8 @@ async def get_my_club(
         "members_count": members_count,
         "is_official": club.is_official,
         "created_at": club.created_at,
-        "is_member": True,  # для своего клуба всегда true
-        "has_pending_request": False,  # для своего клуба всегда false
+        "is_member": True,
+        "has_pending_request": False,
     }
 
 @router.get("/{club_id}")
@@ -214,14 +216,11 @@ async def get_club(
     if not club:
         raise HTTPException(status_code=404, detail="Клуб не найден")
     
-    # 🔥 Загружаем президента
     president = db.query(User).filter(User.id == club.president_id).first()
     
-    # 🔥 Считаем количество
     judges_count = db.query(ClubJudge).filter(ClubJudge.club_id == club.id).count()
     members_count = db.query(User).filter(User.club_id == club.id).count()
     
-    # 🔥 Проверки для текущего пользователя
     is_member = current_user.club_id == club.id
     has_pending_request = db.query(ClubRequest).filter(
         ClubRequest.club_id == club.id,
@@ -239,13 +238,13 @@ async def get_club(
         "logo_url": club.logo_url,
         "president_id": club.president_id,
         "president_name": president.username if president else None,
-        "president_avatar": president.avatar_url if president else None,  # 👈 ДОБАВИТЬ
+        "president_avatar": president.avatar_url if president else None,
         "judges_count": judges_count,
-        "members_count": members_count,  # 👈 ДОБАВИТЬ
+        "members_count": members_count,
         "is_official": club.is_official,
         "created_at": club.created_at,
-        "is_member": is_member,  # 👈 ДОБАВИТЬ
-        "has_pending_request": has_pending_request,  # 👈 ДОБАВИТЬ
+        "is_member": is_member,
+        "has_pending_request": has_pending_request,
     }
 
 @router.put("/{club_id}")
@@ -305,6 +304,9 @@ async def update_club(
         "created_at": club.created_at,
     }
 
+# ============================================================
+# ЗАГРУЗКА ЛОГОТИПА КЛУБА (С СЖАТИЕМ)
+# ============================================================
 @router.post("/{club_id}/upload-logo")
 async def upload_club_logo(
     club_id: int,
@@ -321,12 +323,33 @@ async def upload_club_logo(
     if club.president_id != user.id:
         raise HTTPException(status_code=403, detail="Только президент может менять логотип")
     
-    ext = file.filename.split('.')[-1] if '.' in file.filename else 'jpg'
-    filename = f"club_{club_id}_{datetime.now().timestamp()}.{ext}"
+    # 🔥 ЧИТАЕМ ФАЙЛ
+    contents = await file.read()
+    
+    # 🔥 ОТКРЫВАЕМ ИЗОБРАЖЕНИЕ
+    try:
+        img = Image.open(io.BytesIO(contents))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Неверный формат изображения: {e}")
+    
+    # 🔥 КОНВЕРТИРУЕМ В RGB
+    if img.mode in ('RGBA', 'LA', 'P'):
+        img = img.convert('RGB')
+    
+    # 🔥 РЕСАЙЗ
+    img.thumbnail((MAX_CLUB_LOGO_SIZE, MAX_CLUB_LOGO_SIZE), Image.Resampling.LANCZOS)
+    
+    # 🔥 СОХРАНЯЕМ В JPEG
+    output = io.BytesIO()
+    img.save(output, format='JPEG', quality=JPEG_QUALITY, optimize=True)
+    output.seek(0)
+    
+    # 🔥 СОХРАНЯЕМ НА ДИСК
+    filename = f"club_{club_id}_{datetime.now().timestamp()}.jpg"
     file_path = os.path.join(UPLOAD_DIR, filename)
     
     with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+        buffer.write(output.read())
     
     logo_url = f"http://161.104.46.234:8001/uploads/avatars/{filename}"
     club.logo_url = logo_url
