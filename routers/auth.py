@@ -245,25 +245,91 @@ async def send_verification_email_request(
     return {"message": "Verification email sent"}
 
 # ========== ПРОВЕРКА EMAIL ==========
-@router.get("/verify-email")
+from fastapi.responses import HTMLResponse
+
+@router.get("/verify-email", response_class=HTMLResponse)
 async def verify_email(token: str, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.verification_token == token).first()
     if not user:
-        raise HTTPException(status_code=400, detail="Invalid token")
+        return HTMLResponse("""
+        <html>
+        <body style="font-family: Arial; text-align: center; padding: 50px;">
+            <h1 style="color: red;">❌ Неверный токен</h1>
+            <p>Ссылка недействительна.</p>
+        </body>
+        </html>
+        """, status_code=400)
     
     if user.verification_token_used:
-        raise HTTPException(status_code=400, detail="Token already used")
+        return HTMLResponse("""
+        <html>
+        <body style="font-family: Arial; text-align: center; padding: 50px;">
+            <h1 style="color: orange;">⚠️ Токен уже использован</h1>
+            <p>Ваш email уже подтверждён.</p>
+            <a href="http://161.104.46.234/login">Войти</a>
+        </body>
+        </html>
+        """, status_code=400)
     
     if user.verification_token_expires < datetime.utcnow():
-        raise HTTPException(status_code=400, detail="Token expired")
+        return HTMLResponse("""
+        <html>
+        <body style="font-family: Arial; text-align: center; padding: 50px;">
+            <h1 style="color: red;">❌ Ссылка истекла</h1>
+            <p>Запросите новое письмо.</p>
+        </body>
+        </html>
+        """, status_code=400)
     
+    # ✅ ПОДТВЕРЖДАЕМ
     user.is_email_verified = True
     user.email_verified_at = datetime.utcnow()
     user.verification_token_used = True
     db.commit()
     
-    return {"message": "Email verified successfully"}
-
+    return HTMLResponse("""
+    <html>
+    <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                text-align: center;
+                padding: 50px 20px;
+                background: #f5f5f5;
+            }
+            .container {
+                max-width: 400px;
+                margin: 0 auto;
+                background: white;
+                padding: 40px;
+                border-radius: 16px;
+                box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            }
+            h1 { color: #f58b20; }
+            .btn {
+                display: inline-block;
+                background: #f58b20;
+                color: white;
+                padding: 12px 32px;
+                text-decoration: none;
+                border-radius: 8px;
+                font-weight: bold;
+                margin-top: 20px;
+            }
+            .btn:hover { background: #e07a10; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>✅ Email подтверждён!</h1>
+            <p>Вы успешно зарегистрировались в Mafia Help.</p>
+            <p style="color: #666; font-size: 14px;">Теперь вы можете войти в приложение.</p>
+            <a href="http://161.104.46.234/login" class="btn">Войти</a>
+        </div>
+    </body>
+    </html>
+    """)
 # ========== ПРОФИЛЬ ==========
 @router.get("/me", response_model=UserResponse)
 async def get_me(token: str, db: Session = Depends(get_db)):

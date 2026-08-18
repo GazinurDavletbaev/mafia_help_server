@@ -17,7 +17,7 @@ def send_verification_email(email: str, token: str):
 
     # 🔥 ДВЕ ССЫЛКИ
     deep_link = f"mafiahelp://verify-email?token={token}"
-    web_link = f"https://161.104.46.234/verify-email?token={token}"
+    web_link = f"http://161.104.46.234/verify-email?token={token}"
 
     msg = MIMEMultipart()
     msg['From'] = SMTP_USER
