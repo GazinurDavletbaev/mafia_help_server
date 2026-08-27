@@ -35,8 +35,10 @@ class ClubResponse(BaseModel):
     city: Optional[str]
     president_id: int
     president_name: Optional[str]
+    president_avatar: Optional[str] = None  # 🔥 ДОБАВИТЬ
     logo_url: Optional[str]
     judges_count: int
+    members_count: int = 0  # 🔥 ДОБАВИТЬ
     is_official: bool
     is_member: bool = False
     is_pending: bool = False
@@ -78,6 +80,7 @@ async def get_clubs(
     for club in clubs:
         president = db.query(User).filter(User.id == club.president_id).first()
         judges_count = db.query(ClubJudge).filter(ClubJudge.club_id == club.id).count()
+        members_count = db.query(User).filter(User.club_id == club.id).count()
         
         is_member = db.query(ClubJudge).filter(
             ClubJudge.club_id == club.id,
@@ -97,8 +100,10 @@ async def get_clubs(
             "city": club.city,
             "president_id": club.president_id,
             "president_name": president.username if president else None,
+            "president_avatar": president.avatar_url if president else None,
             "logo_url": club.logo_url,
             "judges_count": judges_count,
+            "members_count": members_count,
             "is_official": club.is_official,
             "is_member": is_member,
             "is_pending": is_pending,
