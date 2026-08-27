@@ -153,3 +153,29 @@ async def get_pending_requests_count(
     ).count()
     
     return {"count": count}
+# ============================================================
+# ОТОЗВАТЬ ЗАЯВКУ ПО ID КЛУБА
+# ============================================================
+@router.delete("/requests/cancel")
+async def cancel_request_by_club(
+    club_id: int,
+    token: str,
+    db: Session = Depends(get_db)
+):
+    user = get_current_user(token, db)
+    
+    # Находим заявку пользователя в этом клубе
+    request = db.query(ClubRequest).filter(
+        ClubRequest.club_id == club_id,
+        ClubRequest.user_id == user.id,
+        ClubRequest.status == "pending"
+    ).first()
+    
+    if not request:
+        raise HTTPException(status_code=404, detail="Заявка не найдена")
+    
+    # Удаляем заявку
+    db.delete(request)
+    db.commit()
+    
+    return {"success": True, "message": "Заявка отозвана"}
