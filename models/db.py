@@ -16,11 +16,11 @@ class User(Base):
     club_id = Column(Integer, ForeignKey("clubs.id", ondelete="SET NULL"), nullable=True)
 
     # ✅ НОВЫЕ ПОЛЯ ДЛЯ ПРОФИЛЯ
-    first_name = Column(String(100), nullable=True)   # ✅ ДОБАВИТЬ
-    last_name = Column(String(100), nullable=True)    # ✅ ДОБАВИТЬ
-    country = Column(String(100), nullable=True)      # ✅ ДОБАВИТЬ
-    city = Column(String(100), nullable=True)         # ✅ ДОБАВИТЬ
-    region = Column(String(100), nullable=True)       # ✅ ДОБАВИТЬ
+    first_name = Column(String(100), nullable=True)
+    last_name = Column(String(100), nullable=True)
+    country = Column(String(100), nullable=True)
+    city = Column(String(100), nullable=True)
+    region = Column(String(100), nullable=True)
 
     # Телефон
     phone = Column(String(20), unique=True, nullable=True)
@@ -56,17 +56,26 @@ class Club(Base):
     title = Column(String(100), nullable=False)
     city = Column(String(100), nullable=True)
     president_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    description = Column(Text, nullable=True)      # ✅ НОВОЕ
-    country = Column(String(100), nullable=True)   # ✅ НОВОЕ
-    region = Column(String(100), nullable=True)    # ✅ НОВОЕ
+    description = Column(Text, nullable=True)
+    country = Column(String(100), nullable=True)
+    region = Column(String(100), nullable=True)
     logo_url = Column(String(255), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
     
-    # ✅ НОВЫЕ ПОЛЯ ДЛЯ СТАТУСА КЛУБА
+    # ✅ НОВЫЕ ПОЛЯ ДЛЯ КЛУБА
     is_official = Column(Boolean, default=False)
     official_verified_at = Column(DateTime, nullable=True)
     official_verified_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    
+    # ✅ НОВЫЕ ПОЛЯ ДЛЯ АДРЕСА И СОЦСЕТЕЙ
+    address = Column(String(255), nullable=True)
+    instagram = Column(String(255), nullable=True)
+    youtube = Column(String(255), nullable=True)
+    website = Column(String(255), nullable=True)
+    vk = Column(String(255), nullable=True)
+    telegram = Column(String(255), nullable=True)
+    twitch = Column(String(255), nullable=True)
 
 class ClubJudge(Base):
     __tablename__ = "club_judges"
