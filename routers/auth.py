@@ -64,13 +64,6 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
             detail=ERROR_MESSAGES["email_registered"]
         )
 
-    # Проверка существующего никнейма
-    if db.query(User).filter(User.username == user_data.username).first():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=ERROR_MESSAGES["username_taken"]
-        )
-
     # Проверка длины пароля
     if len(user_data.password) < 6:
         raise HTTPException(
@@ -81,10 +74,6 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
     if db.query(User).filter(User.email == user_data.email).first():
         print("❌ Email уже занят")
         raise HTTPException(status_code=400, detail="Email already registered")
-    
-    if db.query(User).filter(User.username == user_data.username).first():
-        print("❌ Username уже занят")
-        raise HTTPException(status_code=400, detail="Username already taken")
     
     # Создаём пользователя
     user = User(
