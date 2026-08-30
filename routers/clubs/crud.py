@@ -17,7 +17,6 @@ router = APIRouter()
 UPLOAD_DIR = "/root/mafia_excel_api/uploads/avatars"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# 🔥 МАКСИМАЛЬНЫЙ РАЗМЕР ЛОГОТИПА КЛУБА
 MAX_CLUB_LOGO_SIZE = 300
 JPEG_QUALITY = 85
 
@@ -28,6 +27,13 @@ class ClubCreate(BaseModel):
     description: Optional[str] = None
     country: Optional[str] = None
     region: Optional[str] = None
+    address: Optional[str] = None
+    vk: Optional[str] = None
+    telegram: Optional[str] = None
+    twitch: Optional[str] = None
+    instagram: Optional[str] = None
+    youtube: Optional[str] = None
+    website: Optional[str] = None
 
 class ClubResponse(BaseModel):
     id: int
@@ -35,14 +41,24 @@ class ClubResponse(BaseModel):
     city: Optional[str]
     president_id: int
     president_name: Optional[str]
-    president_avatar: Optional[str] = None  # 🔥 ДОБАВИТЬ
+    president_avatar: Optional[str] = None
     logo_url: Optional[str]
     judges_count: int
-    members_count: int = 0  # 🔥 ДОБАВИТЬ
+    members_count: int = 0
     is_official: bool
     is_member: bool = False
     is_pending: bool = False
     created_at: datetime
+    description: Optional[str] = None
+    country: Optional[str] = None
+    region: Optional[str] = None
+    address: Optional[str] = None
+    vk: Optional[str] = None
+    telegram: Optional[str] = None
+    twitch: Optional[str] = None
+    instagram: Optional[str] = None
+    youtube: Optional[str] = None
+    website: Optional[str] = None
 
 class ClubDetailResponse(BaseModel):
     id: int
@@ -53,6 +69,13 @@ class ClubDetailResponse(BaseModel):
     description: Optional[str] = None
     country: Optional[str] = None
     region: Optional[str] = None
+    address: Optional[str] = None
+    vk: Optional[str] = None
+    telegram: Optional[str] = None
+    twitch: Optional[str] = None
+    instagram: Optional[str] = None
+    youtube: Optional[str] = None
+    website: Optional[str] = None
     logo_url: Optional[str]
     judges_count: int
     is_official: bool
@@ -64,6 +87,13 @@ class ClubUpdate(BaseModel):
     description: Optional[str] = None
     country: Optional[str] = None
     region: Optional[str] = None
+    address: Optional[str] = None
+    vk: Optional[str] = None
+    telegram: Optional[str] = None
+    twitch: Optional[str] = None
+    instagram: Optional[str] = None
+    youtube: Optional[str] = None
+    website: Optional[str] = None
     logo_url: Optional[str] = None
 
 # ========== ЭНДПОИНТЫ ==========
@@ -108,6 +138,16 @@ async def get_clubs(
             "is_member": is_member,
             "is_pending": is_pending,
             "created_at": club.created_at,
+            "description": club.description,
+            "country": club.country,
+            "region": club.region,
+            "address": club.address,
+            "vk": club.vk,
+            "telegram": club.telegram,
+            "twitch": club.twitch,
+            "instagram": club.instagram,
+            "youtube": club.youtube,
+            "website": club.website,
         })
     
     result.sort(key=lambda x: (not x["is_official"], x["title"]))
@@ -120,7 +160,8 @@ async def create_club(
     db: Session = Depends(get_db)
 ):
     user = get_current_user(token, db)
-    
+    print("📦 club_data:", club_data.dict())  # ← ДОБАВИТЬ
+    print("📦 address:", club_data.address)   # ← ДОБАВИТЬ
     existing_club = db.query(Club).filter(Club.president_id == user.id).first()
     if existing_club:
         raise HTTPException(status_code=400, detail="Вы уже являетесь президентом клуба")
@@ -136,6 +177,13 @@ async def create_club(
         description=club_data.description,
         country=club_data.country,
         region=club_data.region,
+        address=club_data.address,
+        vk=club_data.vk,
+        telegram=club_data.telegram,
+        twitch=club_data.twitch,
+        instagram=club_data.instagram,
+        youtube=club_data.youtube,
+        website=club_data.website,
         is_official=False,
     )
     db.add(club)
@@ -158,6 +206,13 @@ async def create_club(
         "description": club.description,
         "country": club.country,
         "region": club.region,
+        "address": club.address,
+        "vk": club.vk,
+        "telegram": club.telegram,
+        "twitch": club.twitch,
+        "instagram": club.instagram,
+        "youtube": club.youtube,
+        "website": club.website,
         "logo_url": club.logo_url,
         "judges_count": 1,
         "is_official": club.is_official,
@@ -197,6 +252,13 @@ async def get_my_club(
         "description": club.description,
         "country": club.country,
         "region": club.region,
+        "address": club.address,
+        "vk": club.vk,
+        "telegram": club.telegram,
+        "twitch": club.twitch,
+        "instagram": club.instagram,
+        "youtube": club.youtube,
+        "website": club.website,
         "logo_url": club.logo_url,
         "president_id": club.president_id,
         "president_name": president.username if president else None,
@@ -240,6 +302,13 @@ async def get_club(
         "description": club.description,
         "country": club.country,
         "region": club.region,
+        "address": club.address,
+        "vk": club.vk,
+        "telegram": club.telegram,
+        "twitch": club.twitch,
+        "instagram": club.instagram,
+        "youtube": club.youtube,
+        "website": club.website,
         "logo_url": club.logo_url,
         "president_id": club.president_id,
         "president_name": president.username if president else None,
@@ -285,6 +354,20 @@ async def update_club(
         club.country = club_data.country
     if club_data.region is not None:
         club.region = club_data.region
+    if club_data.address is not None:
+        club.address = club_data.address
+    if club_data.vk is not None:
+        club.vk = club_data.vk
+    if club_data.telegram is not None:
+        club.telegram = club_data.telegram
+    if club_data.twitch is not None:
+        club.twitch = club_data.twitch
+    if club_data.instagram is not None:
+        club.instagram = club_data.instagram
+    if club_data.youtube is not None:
+        club.youtube = club_data.youtube
+    if club_data.website is not None:
+        club.website = club_data.website
     if club_data.logo_url is not None:
         club.logo_url = club_data.logo_url
     
@@ -301,6 +384,13 @@ async def update_club(
         "description": club.description,
         "country": club.country,
         "region": club.region,
+        "address": club.address,
+        "vk": club.vk,
+        "telegram": club.telegram,
+        "twitch": club.twitch,
+        "instagram": club.instagram,
+        "youtube": club.youtube,
+        "website": club.website,
         "logo_url": club.logo_url,
         "president_id": club.president_id,
         "president_name": president.username if president else None,
@@ -310,7 +400,7 @@ async def update_club(
     }
 
 # ============================================================
-# ЗАГРУЗКА ЛОГОТИПА КЛУБА (С СЖАТИЕМ)
+# ЗАГРУЗКА ЛОГОТИПА КЛУБА
 # ============================================================
 @router.post("/{club_id}/upload-logo")
 async def upload_club_logo(
@@ -328,28 +418,22 @@ async def upload_club_logo(
     if club.president_id != user.id:
         raise HTTPException(status_code=403, detail="Только президент может менять логотип")
     
-    # 🔥 ЧИТАЕМ ФАЙЛ
     contents = await file.read()
     
-    # 🔥 ОТКРЫВАЕМ ИЗОБРАЖЕНИЕ
     try:
         img = Image.open(io.BytesIO(contents))
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Неверный формат изображения: {e}")
     
-    # 🔥 КОНВЕРТИРУЕМ В RGB
     if img.mode in ('RGBA', 'LA', 'P'):
         img = img.convert('RGB')
     
-    # 🔥 РЕСАЙЗ
     img.thumbnail((MAX_CLUB_LOGO_SIZE, MAX_CLUB_LOGO_SIZE), Image.Resampling.LANCZOS)
     
-    # 🔥 СОХРАНЯЕМ В JPEG
     output = io.BytesIO()
     img.save(output, format='JPEG', quality=JPEG_QUALITY, optimize=True)
     output.seek(0)
     
-    # 🔥 СОХРАНЯЕМ НА ДИСК
     filename = f"club_{club_id}_{datetime.now().timestamp()}.jpg"
     file_path = os.path.join(UPLOAD_DIR, filename)
     
