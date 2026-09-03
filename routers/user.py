@@ -109,15 +109,7 @@ async def update_profile(
     user = get_current_user(token, db)
     
     if data.nickname is not None:
-        # Проверяем, что никнейм не занят
-        existing = db.query(User).filter(
-            User.username == data.nickname,
-            User.id != user.id
-        ).first()
-        if existing:
-            raise HTTPException(status_code=400, detail="Этот никнейм уже занят")
         user.username = data.nickname
-    
     if data.first_name is not None:
         user.first_name = data.first_name
     if data.last_name is not None:
