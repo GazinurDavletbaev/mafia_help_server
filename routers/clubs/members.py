@@ -6,6 +6,11 @@ from .core import get_current_user
 
 router = APIRouter()
 
+
+# ============================================================
+# УЧАСТНИКИ КЛУБА
+# ============================================================
+
 @router.get("/{club_id}/members")
 async def get_club_members(
     club_id: int,
@@ -35,6 +40,7 @@ async def get_club_members(
         })
     
     return {"members": members}
+
 
 @router.delete("/{club_id}/members/{user_id}")
 async def remove_member(
@@ -69,6 +75,7 @@ async def remove_member(
         db.commit()
     
     return {"message": "Участник удалён из клуба"}
+
 
 @router.delete("/{club_id}/leave")
 async def leave_club(
@@ -127,9 +134,11 @@ async def leave_club(
         
         return {"message": "Вы покинули клуб"}
 
+
 # ============================================================
-# ПОДАТЬ ЗАЯВКУ (С ПРОВЕРКОЙ НА ДРУГИЕ ЗАЯВКИ)
+# ПОДАТЬ ЗАЯВКУ (С ВСЕМИ ПРОВЕРКАМИ)
 # ============================================================
+
 @router.post("/{club_id}/join")
 async def join_club(
     club_id: int,
@@ -142,14 +151,22 @@ async def join_club(
     if not club:
         raise HTTPException(status_code=404, detail="Клуб не найден")
     
-    # ✅ Проверяем, не состоит ли пользователь уже в каком-то клубе
+    # ✅ 1. Проверяем, не является ли пользователь президентом какого-то клуба
+    existing_club = db.query(Club).filter(Club.president_id == user.id).first()
+    if existing_club:
+        raise HTTPException(
+            status_code=400,
+            detail="Вы являетесь президентом клуба. Вы не можете подать заявку в другой клуб."
+        )
+    
+    # ✅ 2. Проверяем, не состоит ли пользователь уже в каком-то клубе
     if user.club_id is not None:
         raise HTTPException(
             status_code=400, 
             detail="Вы уже состоите в клубе. Покините текущий клуб, чтобы подать заявку в новый."
         )
     
-    # ✅ Проверяем, не является ли пользователь судьёй в другом клубе
+    # ✅ 3. Проверяем, не является ли пользователь судьёй в другом клубе
     existing_judge = db.query(ClubJudge).filter(ClubJudge.judge_id == user.id).first()
     if existing_judge:
         raise HTTPException(
@@ -157,7 +174,7 @@ async def join_club(
             detail="Вы уже являетесь судьёй в другом клубе. Покините его, чтобы подать заявку."
         )
     
-    # ✅ Проверяем, нет ли уже активной заявки в этот клуб
+    # ✅ 4. Проверяем, нет ли уже активной заявки в этот клуб
     existing_request = db.query(ClubRequest).filter(
         ClubRequest.club_id == club_id,
         ClubRequest.user_id == user.id,
@@ -166,7 +183,7 @@ async def join_club(
     if existing_request:
         raise HTTPException(status_code=400, detail="Вы уже отправили заявку в этот клуб")
     
-    # ✅ Проверяем, нет ли активной заявки в ДРУГОЙ клуб
+    # ✅ 5. Проверяем, нет ли активной заявки в ДРУГОЙ клуб
     other_request = db.query(ClubRequest).filter(
         ClubRequest.user_id == user.id,
         ClubRequest.status == "pending"
@@ -188,8 +205,9 @@ async def join_club(
     
     return {"message": "Заявка отправлена"}
 
+
 # ============================================================
-# ОСТАЛЬНЫЕ ЭНДПОИНТЫ (ЗАЯВКИ, ОТЗЫВ И Т.Д.)
+# ЗАЯВКИ
 # ============================================================
 
 @router.get("/{club_id}/requests")
@@ -225,6 +243,7 @@ async def get_club_requests(
     
     return result
 
+
 @router.post("/requests/{request_id}/approve")
 async def approve_request(
     request_id: int,
@@ -254,6 +273,7 @@ async def approve_request(
     
     return {"message": "Заявка принята. Пользователь добавлен в клуб."}
 
+
 @router.post("/requests/{request_id}/reject")
 async def reject_request(
     request_id: int,
@@ -278,6 +298,7 @@ async def reject_request(
     
     return {"message": "Заявка отклонена"}
 
+
 @router.get("/requests/pending-count")
 async def get_pending_requests_count(
     token: str,
@@ -298,9 +319,11 @@ async def get_pending_requests_count(
     
     return {"count": count}
 
+
 # ============================================================
 # ОТОЗВАТЬ ЗАЯВКУ
 # ============================================================
+
 @router.delete("/requests/cancel")
 async def cancel_request_by_club(
     club_id: int,
